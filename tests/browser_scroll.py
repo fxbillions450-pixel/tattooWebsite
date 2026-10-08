@@ -100,7 +100,9 @@ class ScrollBrowserTests(unittest.TestCase):
 
  def motion_page(self):
   if not self.page.evaluate('window.__NOIR_TEST__.webgl'):self.skipTest('WebGL not available in this browser runtime')
-  self.page.emulate_media(reduced_motion='no-preference')
+  self.page.close()
+  self.page = self.browser.new_page(viewport={'width':1760,'height':832}, has_touch=True, reduced_motion='no-preference')
+  self.page.on('pageerror',lambda e:self.errors.append(str(e)))
   self.page.set_content(HTML.read_text(encoding='utf-8'))
   self.page.wait_for_function('window.__NOIR_TEST__?.assetsWarmed')
   self.assertFalse(self.page.evaluate('window.__NOIR_TEST__.reduceMotion'))

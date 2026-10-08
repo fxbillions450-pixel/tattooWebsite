@@ -91,7 +91,9 @@ class ScrollBrowserTests(unittest.TestCase):
  def test_05_small_slow_notches_accumulate(self):
   self.go('artist');self.native_stroke([(0,-20),(240,-20)]);self.assertEqual(self.section(),'home')
  def test_06_native_content_reading_keeps_section(self):
-  self.go('work');self.top(100);self.wheel(70,'#section-content');self.assertEqual(self.section(),'work');self.assertGreater(self.native_top(),100)
+  self.go('work');self.top(100);self.wheel(70,'#section-content')
+  self.page.wait_for_function("document.getElementById('section-content').scrollTop > 100",timeout=5000)
+  self.assertEqual(self.section(),'work');self.assertGreater(self.native_top(),100)
   self.wheel(-60,'#section-content');self.assertEqual(self.section(),'work')
  def test_07_fresh_scroll_at_panel_bottom_advances(self):
   self.go('work');self.top(100000);self.wheel(120,'#section-content');self.assertEqual(self.section(),'ritual')
@@ -119,7 +121,9 @@ class ScrollBrowserTests(unittest.TestCase):
  def test_14_mobile_touch_panel_top_returns_home(self):
   self.page.set_viewport_size({'width':390,'height':844});self.go('artist');self.top(0);self.touch('#section-content',90);self.assertEqual(self.section(),'home')
  def test_15_mobile_native_reading_stays_in_panel(self):
-  self.page.set_viewport_size({'width':390,'height':844});self.go('work');self.top(150);self.touch('#section-content',-70);self.assertEqual(self.section(),'work');self.assertGreater(self.native_top(),150)
+  self.page.set_viewport_size({'width':390,'height':844});self.go('work');self.top(150);self.touch('#section-content',-70)
+  self.page.wait_for_function("document.getElementById('section-content').scrollTop > 150",timeout=5000)
+  self.assertEqual(self.section(),'work');self.assertGreater(self.native_top(),150)
  def test_16_mobile_menu_blocks_navigation(self):
   self.page.set_viewport_size({'width':390,'height':844});self.go('artist');self.page.locator('.menu-toggle').click();self.page.locator('#app').dispatch_event('wheel',{'deltaY':-120,'bubbles':True,'cancelable':True});self.assertEqual(self.section(),'artist')
  def test_17_touch_swipe_only_advances_once(self):

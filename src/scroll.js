@@ -27,7 +27,11 @@ class WheelIntent {
   const magnitude = Math.abs(delta), direction = Math.sign(delta);
   if (!Number.isFinite(delta) || magnitude < .2) return {prevent: false, step: 0};
   const gap = now - this.lastAt;
-  let fresh = gap > GAP, carry = magnitude;
+  // Rendering stalls can spread one decaying trackpad tail across large gaps.
+  // An idle timeout alone must not turn that tail into several new gestures.
+  const delayedTail = gap <= 1200 && this.owner === 'scene' && this.consumed &&
+   direction === this.direction && magnitude < this.previous * .97 && magnitude < this.peak * .9;
+  let fresh = gap > GAP && !delayedTail, carry = magnitude;
   // Slow, small wheel notches may span separate event bursts. Keep unfinished
   // intent briefly, but never carry a consumed gesture or panel-reading distance.
   const pending = fresh && gap <= 500 && !this.consumed && this.owner === 'scene' && direction === this.direction ? this.sum : 0;
@@ -41,7 +45,7 @@ class WheelIntent {
   } else this.reverseSum = 0;
   if (!fresh && (this.consumed || this.owner === 'native') && now - this.startedAt >= REPEAT) {
    const renewed = magnitude >= 12 && magnitude >= this.previous * 1.8 && magnitude >= this.peak * .6;
-   const repeatedNotch = magnitude >= Math.max(16, this.peak * .8);
+   const repeatedNotch = magnitude >= Math.max(16, this.peak * .8) && magnitude >= this.previous * .98;
    fresh = renewed || repeatedNotch;
   }
   if (fresh) {
@@ -74,7 +78,10 @@ function install({app, content, step, getSection, blocked}) {
   const target = elementOf(event.target), delta = normalizeWheel(event, app.clientHeight);
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || ignored(target)) { wheel.reset(); return; }
   if (!delta.y || Math.abs(delta.x) > Math.abs(delta.y)) return;
-  const decision = wheel.read(delta.y, performance.now(), nativeAvailable(target, Math.sign(delta.y)));
+  const now = performance.now(), stamp = event.timeStamp;
+  // Prefer capture time, not delivery time, when the main thread was busy.
+  const inputTime = Number.isFinite(stamp) && Math.abs(stamp - now) < 60000 ? stamp : now;
+  const decision = wheel.read(delta.y, inputTime, nativeAvailable(target, Math.sign(delta.y)));
   if (decision.prevent && event.cancelable) event.preventDefault();
   if (decision.step) navigate(decision.step);
  }

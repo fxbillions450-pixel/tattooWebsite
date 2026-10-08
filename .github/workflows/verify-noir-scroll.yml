@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: noir-scroll-repair-validation
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -53,7 +53,7 @@ jobs:
           from pathlib import Path
           import hashlib
           html = Path('index.html').read_bytes()
-          expected = 'c0624aa90a4f20547b384bc42dca58c4556c52e3abf8757d765e15826a61d1ff'
+          expected = 'd7e6ef8e6b71e8e5fd8f2f971fa3ec3d5b9386553e238dff923e609e6422d3c0'
           assert hashlib.sha256(html).hexdigest() == expected
           assert html == Path('public/index.html').read_bytes()
           print('Verified scroll-fixed HTML:', expected)
@@ -61,7 +61,7 @@ jobs:
           git diff --exit-code -- src/styles.css src/artwork.js src/engine.js src/mesh.js src/motion.js
           node --check src/app.js
           node --check src/scroll.js
-          node --test tests/scroll.test.cjs
+          node --test tests/*.test.cjs
           node tools/test_motion.cjs
       - name: Install pinned browser test dependency
         run: python3 -m pip install playwright==1.57.0

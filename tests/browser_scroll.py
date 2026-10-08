@@ -1,6 +1,8 @@
 """Run: python tests/browser_scroll.py [path-to-index.html]
 Requires Playwright and Chromium. Uses set_content, so no server/network is needed.
 Real mouse-wheel/native scrolling and CDP touch input; no input-controller mocks.
+Timing-sensitive strokes use CDP capture timestamps so software rendering or
+protocol round trips cannot silently turn one stroke into several fresh gestures.
 """
 from pathlib import Path
 import json, os, sys, unittest
@@ -35,6 +37,37 @@ class ScrollBrowserTests(unittest.TestCase):
   if selector:self.page.locator(selector).hover()
   else:self.page.mouse.move(850,420)
   self.page.mouse.wheel(0,delta);self.page.wait_for_timeout(pause)
+ def native_stroke(self,events,selector=None):
+  """Replay trusted native wheel events with specified (offset_ms, delta) pairs.
+
+  Preserve capture cadence even if the software GPU delays event delivery.
+  This does not patch the clock, router, camera, DOM scrollTop or event handler.
+  """
+  if selector:
+   self.page.locator(selector).hover()
+   box=self.page.locator(selector).bounding_box();x=box['x']+box['width']/2;y=box['y']+min(70,box['height']/2)
+  else:x,y=850,420;self.page.mouse.move(x,y)
+  self.page.evaluate("""() => {
+   window.__wheelEvidence=[];
+   window.__recordWheel=e=>window.__wheelEvidence.push({stamp:e.timeStamp,delivered:performance.now(),delta:e.deltaY,trusted:e.isTrusted});
+   window.addEventListener('wheel',window.__recordWheel,{capture:true,passive:true});
+  }""")
+  origin,base=self.page.evaluate('[performance.timeOrigin,performance.now()]')
+  cdp=self.page.context.new_cdp_session(self.page);previous=0
+  try:
+   for offset,delta in events:
+    self.page.wait_for_timeout(max(0,offset-previous));previous=offset
+    cdp.send('Input.dispatchMouseEvent',{'type':'mouseWheel','x':x,'y':y,'deltaX':0,'deltaY':delta,'timestamp':(origin+base+offset)/1000})
+   self.page.wait_for_function('window.__wheelEvidence.length >= '+str(len(events)))
+   evidence=self.page.evaluate('window.__wheelEvidence')
+   self.assertEqual(len(evidence),len(events))
+   for record,(offset,delta) in zip(evidence,events):
+    self.assertTrue(record['trusted']);self.assertAlmostEqual(record['delta'],delta,places=4)
+    self.assertAlmostEqual(record['stamp']-evidence[0]['stamp'],offset-events[0][0],delta=2)
+   print('Trusted wheel capture/delivery evidence:',json.dumps(evidence),flush=True)
+  finally:
+   self.page.evaluate("window.removeEventListener('wheel',window.__recordWheel,true)")
+   cdp.detach()
  def top(self,value=0):self.page.locator('#section-content').evaluate('(e,y)=>e.scrollTop=y',value)
  def native_top(self):return self.page.locator('#section-content').evaluate('e=>e.scrollTop')
  def touch(self,selector,dy):
@@ -56,7 +89,7 @@ class ScrollBrowserTests(unittest.TestCase):
  def test_04_settings_are_not_a_dead_zone(self):
   self.go('artist');self.wheel(-120,'.settings');self.assertEqual(self.section(),'home')
  def test_05_small_slow_notches_accumulate(self):
-  self.go('artist');self.wheel(-20);self.wheel(-20);self.assertEqual(self.section(),'home')
+  self.go('artist');self.native_stroke([(0,-20),(240,-20)]);self.assertEqual(self.section(),'home')
  def test_06_native_content_reading_keeps_section(self):
   self.go('work');self.top(100);self.wheel(70,'#section-content');self.assertEqual(self.section(),'work');self.assertGreater(self.native_top(),100)
   self.wheel(-60,'#section-content');self.assertEqual(self.section(),'work')
@@ -64,15 +97,11 @@ class ScrollBrowserTests(unittest.TestCase):
   self.go('work');self.top(100000);self.wheel(120,'#section-content');self.assertEqual(self.section(),'ritual')
  def test_08_reading_does_not_leak_at_a_boundary(self):
   self.go('artist');self.top(50)
-  self.wheel(-100,'#section-content',pause=60)
-  self.page.mouse.wheel(0,-70);self.page.wait_for_timeout(50)
-  self.page.mouse.wheel(0,-40);self.page.wait_for_timeout(50)
+  self.native_stroke([(0,-100),(60,-70),(110,-40)],'#section-content')
   self.assertEqual(self.section(),'artist')
   self.page.wait_for_timeout(250);self.wheel(-40,'#section-content');self.assertEqual(self.section(),'home')
  def test_09_trackpad_tail_does_not_skip(self):
-  self.page.mouse.move(850,420)
-  for i in range(45):
-   self.page.mouse.wheel(0,120*(.88**i));self.page.wait_for_timeout(18)
+  self.native_stroke([(i*18,120*(.88**i)) for i in range(45)])
   self.assertEqual(self.section(),'artist')
  def test_10_continued_deliberate_scroll_does_not_lock(self):
   self.page.mouse.move(850,420)

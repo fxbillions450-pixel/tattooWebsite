@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.noir-import/**'
+      - '.github/workflows/import-approved-noir.yml'
 
 permissions:
   contents: write
@@ -28,7 +29,8 @@ jobs:
         with:
           python-version: '3.13.5'
       - name: Install pinned build dependencies
-        run: python -m pip install --only-binary=:all: numpy==2.3.5 scipy==1.17.0 scikit-image==0.26.0
+        run: |
+          python -m pip install --only-binary=:all: numpy==2.3.5 scipy==1.17.0 scikit-image==0.26.0
       - name: Restore source and verify approved website byte-for-byte
         env:
           PYTHONHASHSEED: '0'

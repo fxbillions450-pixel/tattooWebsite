@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#070708"><meta name="description" content="NOIR — an interactive tattoo sleeve concept. Explore the artist, work and process through one sculptural 3D arm."><title>NOIR — Ink beyond skin / Interactive concept</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%23070708'/%3E%3Cpath d='M17 47V17h6l18 25V17h6v30h-6L23 22v25z' fill='%23e9e4e7'/%3E%3C/svg%3E"><!-- STYLE --></head>
+<body>
+<a class="skip-link" href="#section-content">Skip to section content</a>
+<div id="app">
+<div class="ambient" aria-hidden="true"><div class="back-type">PERMANENT.</div></div>
+<canvas id="scene" aria-label="Interactive tattooed arm. Select the numbered tattoo zones, or use the section navigation below."></canvas>
+<div class="vignette" aria-hidden="true"></div><div class="grain" aria-hidden="true"></div>
+<header class="topbar">
+<a class="brand" href="#home" data-section="home" aria-label="NOIR, return to the complete sleeve"><span class="wordmark">NØIR<span class="slash">/</span></span><span class="brand-meta">TATTOO<br>ATELIER</span></a>
+<nav class="topnav" id="main-nav" aria-label="Main navigation"><a href="#artist" data-section="artist">The artist</a><a href="#work" data-section="work">Selected work</a><a href="#ritual" data-section="ritual">The ritual</a></nav>
+<a class="book-nav" href="#booking" data-section="booking">START A PIECE <span aria-hidden="true">↗</span></a>
+<button class="menu-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="main-nav"><i></i><i></i></button>
+</header>
+<main id="main-content">
+<div class="hero" id="home-content"><div class="eyebrow"><span class="tiny-square"></span>THE BODY IS THE CANVAS.</div><h1><span>INK.</span><span>BEYOND</span><span class="outline">SKIN.</span></h1><p class="intro">Some stories aren't told.<br>They're worn. Explore a different<br>kind of tattoo experience.</p><button class="explore" data-section="artist"><span class="circle-arrow" aria-hidden="true">↘</span>EXPLORE THE SLEEVE</button></div>
+<div class="model-meta" aria-hidden="true"><b>FIG. 001</b> / THE SLEEVE<br>BLACKWORK · IN THREE DIMENSIONS</div>
+<button class="return-overview" data-section="home"><span aria-hidden="true">←</span> BACK TO THE SLEEVE</button>
+<div id="hotspots" aria-label="Tattoo navigation zones"></div>
+<svg id="connector" aria-hidden="true"><path d=""/></svg>
+<section id="panel" aria-labelledby="section-title" inert><div class="panel-shell"><div class="panel-top"><span class="section-number">01</span><span id="panel-label">THE ARTIST</span><button class="panel-close" data-section="home" aria-label="Close section and return to sleeve">×</button></div><div class="panel-scroll" id="section-content" tabindex="-1"></div></div></section>
+<div class="location-caption" aria-hidden="true"><div class="big-index">01</div><div class="location-name">UPPER ARM<br>THE ARTIST</div></div>
+<div class="scroll-cue"><svg viewBox="0 0 13 20" aria-hidden="true"><rect x="2" y="1" width="9" height="17" rx="4.5"/><path d="M6.5 4v4"/></svg>SCROLL TO DISCOVER · CLICK A TATTOO TO ENTER</div>
+</main>
+<footer class="bottom-bar"><div class="prototype-mark"><strong>AN INTERACTIVE STUDY.</strong>DESIGN PROTOTYPE / NOT A LIVE STUDIO</div><nav class="section-nav" aria-label="Section navigation"><button data-section="home" aria-label="Overview" aria-current="page">00</button><span class="step-line"></span><button data-section="artist" aria-label="The artist">01</button><button data-section="work" aria-label="Selected work">02</button><button data-section="ritual" aria-label="The ritual">03</button><button data-section="booking" aria-label="Start a piece">04</button></nav><div class="settings"><div class="color-settings" aria-label="Accent color"><button class="color-btn" style="--swatch:#ef3349" data-color="red" aria-label="Neon red accent" aria-pressed="true"></button><button class="color-btn" style="--swatch:#a877ec" data-color="purple" aria-label="Neon purple accent" aria-pressed="false"></button></div><button class="motion-btn" aria-label="Use reduced motion" aria-pressed="false"><span class="status-dot"></span><span class="motion-label">MOTION ON</span></button><div class="arrows"><button id="prev" aria-label="Previous section" disabled>←</button><button id="next" aria-label="Next section">→</button></div></div></footer>
+<div id="status" class="sr-only" role="status" aria-live="polite"></div><div class="error-banner" id="error-banner" hidden></div>
+<div class="loading" aria-live="polite"><div class="wordmark">NØIR<span class="slash">/</span></div><span>FORMING THE EXPERIENCE</span><div class="loading-line"><i></i></div></div>
+</div>
+<dialog id="art-dialog" aria-labelledby="dialog-title"><div class="dialog-bar"><span id="dialog-title">SLEEVE STUDY</span><button id="close-dialog" aria-label="Close artwork">×</button></div><img class="dialog-art" alt="Original ornamental tattoo concept artwork"><p class="dialog-caption">Original procedural artwork. A visual study, not a photograph of a completed tattoo.</p></dialog>
+<noscript><style>.loading{display:none}#app{height:auto;min-height:100vh}.hero{position:relative;top:auto;padding-top:140px}.bottom-bar{display:none}</style><p style="position:relative;padding:30px;color:#ddd">This interactive preview requires JavaScript. The source contains no tracking, remote services or live booking system.</p></noscript>
+<!-- MESH -->
+<!-- ARTWORK -->
+<!-- ENGINE -->
+<!-- MOTION -->
+<!-- APP -->
+</body></html>

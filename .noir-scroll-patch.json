@@ -1,0 +1,45 @@
+{
+  "src/app.js": {
+    "before": "3538def14e5a004a623d697833e9c9f23801620f8a4829538638e5d36dba9e76",
+    "after": "f2676394c720f533c796fd897e468e181c02291e1c2d22e91afff48f14de41f6",
+    "replacements": [
+      [
+        "let section='home',engine=null,transition=null,raf=0,cam=null,lastWheel=0,wheelSum=0,lastDeltaAt=0,accent='red',reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;\n",
+        "let section='home',engine=null,transition=null,raf=0,cam=null,accent='red',reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;\n"
+      ],
+      [
+        "let wheelDirection=0,wheelConsumed=false;\n",
+        ""
+      ],
+      [
+        "// Wheel input outside a content panel triggers one section, not scroll scrubbing.\n// Wheel input INSIDE the panel never navigates, even at a scroll boundary.\napp.addEventListener('wheel',e=>{\n if(e.ctrlKey||e.target.closest('#panel,.topnav,.settings')||$('#art-dialog').open)return;\n if(Math.abs(e.deltaY)<Math.abs(e.deltaX)||!e.deltaY)return;e.preventDefault();\n const now=performance.now(),direction=Math.sign(e.deltaY);\n const newGesture=now-lastDeltaAt>190,reverse=wheelDirection!==0&&direction!==wheelDirection;\n if(newGesture||reverse){wheelSum=0;wheelConsumed=false}\n lastDeltaAt=now;wheelDirection=direction;\n if(wheelConsumed)return;\n wheelSum+=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?innerHeight:1);\n // One transition per gesture; a deliberate reverse can retarget during travel.\n if(Math.abs(wheelSum)>55&&(reverse||now-lastWheel>180)){\n  changeStep(direction);lastWheel=now;wheelSum=0;wheelConsumed=true;\n }\n},{passive:false});\ncanvas.addEventListener('pointerdown',e=>{pointerDown={x:e.clientX,y:e.clientY,time:performance.now(),type:e.pointerType};canvas.setPointerCapture(e.pointerId)});\n",
+        "// Boundary-aware wheel/touch navigation; the motion controller remains the sole camera owner.\nNoirScroll.install({app,content:scroll,step:changeStep,getSection:()=>section,\n blocked:()=>!assetsWarmed||app.classList.contains('menu-open')||$('#art-dialog').open});\ncanvas.addEventListener('pointerdown',e=>{if(!e.isPrimary){pointerDown=null;return}pointerDown={x:e.clientX,y:e.clientY,time:performance.now(),type:e.pointerType,id:e.pointerId,moved:false};canvas.setPointerCapture(e.pointerId)});\n"
+      ],
+      [
+        " if(Math.abs(dy)>55&&Math.abs(dy)>Math.abs(dx)*1.2&&elapsed<950){changeStep(dy<0?1:-1)}else if(Math.hypot(dx,dy)<12&&elapsed<600&&engine){const p=engine.pick(e.clientX,e.clientY);if(p){const id=p[1]>1.13?'artist':p[1]>-.65?'work':p[1]>-1.73?'ritual':'booking';navigate(id)}}pointerDown=null});\n",
+        " if(pointerDown.type!=='touch'&&Math.abs(dy)>55&&Math.abs(dy)>Math.abs(dx)*1.2&&elapsed<950){changeStep(dy<0?1:-1)}else if(!pointerDown.moved&&Math.hypot(dx,dy)<12&&elapsed<600&&engine){const p=engine.pick(e.clientX,e.clientY);if(p){const id=p[1]>1.13?'artist':p[1]>-.65?'work':p[1]>-1.73?'ritual':'booking';navigate(id)}}pointerDown=null});\n"
+      ],
+      [
+        "canvas.addEventListener('pointermove',e=>{if(e.pointerType==='touch'||!engine)return;const top=engine.project([0,3,0]),bottom=engine.project([0,-3.6,0]);const t=Math.max(0,Math.min(1,(e.clientY-top.y)/(bottom.y-top.y)));const center=top.x+(bottom.x-top.x)*t;canvas.classList.toggle('pickable',Math.abs(e.clientX-center)<(mobile()?80:100)&&e.clientY>Math.min(top.y,bottom.y)&&e.clientY<Math.max(top.y,bottom.y))});\n",
+        "canvas.addEventListener('pointermove',e=>{if(pointerDown&&pointerDown.id===e.pointerId&&Math.hypot(e.clientX-pointerDown.x,e.clientY-pointerDown.y)>=12)pointerDown.moved=true;if(e.pointerType==='touch'||!engine)return;const top=engine.project([0,3,0]),bottom=engine.project([0,-3.6,0]);const t=Math.max(0,Math.min(1,(e.clientY-top.y)/(bottom.y-top.y)));const center=top.x+(bottom.x-top.x)*t;canvas.classList.toggle('pickable',Math.abs(e.clientX-center)<(mobile()?80:100)&&e.clientY>Math.min(top.y,bottom.y)&&e.clientY<Math.max(top.y,bottom.y))});\n"
+      ]
+    ]
+  },
+  "src/shell.html": {
+    "before": "d67c65b75922a873fc8c69f1bd78f06361be25323b0fcb630bf1b3cb09405fe8",
+    "after": "a77ae3c6024538be2b3d73a01ba5cdef90d888cace21f01638918ace9f456063",
+    "replacements": [
+      ["<!-- MOTION -->\n", "<!-- MOTION -->\n<!-- SCROLL -->\n"]
+    ]
+  },
+  "tools/build.py": {
+    "before": "21deb97c15d9d5b19380c87810d628e68d9590ee283483ce213c0ac7d56a87f0",
+    "after": "fb60461798f35d78e3a6717f4cfd9fe2e729823d501dad73ee6ce8604110b898",
+    "replacements": [
+      [
+        "for marker,name in [('MESH','mesh.js'),('ARTWORK','artwork.js'),('ENGINE','engine.js'),('MOTION','motion.js'),('APP','app.js')]:\n",
+        "for marker,name in [('MESH','mesh.js'),('ARTWORK','artwork.js'),('ENGINE','engine.js'),('MOTION','motion.js'),('SCROLL','scroll.js'),('APP','app.js')]:\n"
+      ]
+    ]
+  }
+}

@@ -1,0 +1,86 @@
+name: Verify NOIR scroll repair
+
+on:
+  push:
+    branches: [fix/noir-scroll-navigation-20261008]
+    paths:
+      - '.github/workflows/verify-noir-scroll.yml'
+      - '.noir-scroll-patch.json'
+      - 'src/scroll.js'
+      - 'tests/**'
+      - 'tools/test_motion.cjs'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: noir-scroll-repair-validation
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'fxbillions450-pixel/tattooWebsite'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out isolated scroll repair
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Apply only the reviewed input changes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          changes = json.loads(Path('.noir-scroll-patch.json').read_text())
+          assert set(changes) == {'src/app.js', 'src/shell.html', 'tools/build.py'}
+          for name, spec in changes.items():
+              path = Path(name)
+              original = path.read_bytes()
+              assert hashlib.sha256(original).hexdigest() == spec['before'], name
+              content = original.decode('utf-8')
+              for before, after in spec['replacements']:
+                  assert content.count(before) == 1, name
+                  content = content.replace(before, after, 1)
+              result = content.encode('utf-8')
+              assert hashlib.sha256(result).hexdigest() == spec['after'], name
+              path.write_bytes(result)
+          PY
+      - name: Build and verify the exact locally tested website
+        run: |
+          python3 tools/build.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          html = Path('index.html').read_bytes()
+          expected = 'c0624aa90a4f20547b384bc42dca58c4556c52e3abf8757d765e15826a61d1ff'
+          assert hashlib.sha256(html).hexdigest() == expected
+          assert html == Path('public/index.html').read_bytes()
+          print('Verified scroll-fixed HTML:', expected)
+          PY
+          git diff --exit-code -- src/styles.css src/artwork.js src/engine.js src/mesh.js src/motion.js
+          node --check src/app.js
+          node --check src/scroll.js
+          node --test tests/scroll.test.cjs
+          node tools/test_motion.cjs
+      - name: Install pinned browser test dependency
+        run: python3 -m pip install playwright==1.57.0
+      - name: Install Chromium for real browser regression tests
+        run: python3 -m playwright install --with-deps chromium
+      - name: Test actual wheel, touch, panel boundaries and camera navigation
+        run: python3 tests/browser_scroll.py
+      - name: Commit verified source and generated previews to the isolated branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          git config user.name 'fxbillions450-pixel'
+          git config user.email '289425272+fxbillions450-pixel@users.noreply.github.com'
+          git add -- src/app.js src/shell.html tools/build.py index.html public/index.html build-manifest.json
+          git commit -m 'Fix scroll navigation and rebuild verified NOIR previews'
+          askpass="$RUNNER_TEMP/noir-scroll-askpass.sh"
+          printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$GH_TOKEN" ;; esac' > "$askpass"
+          chmod 700 "$askpass"
+          trap 'rm -f "$askpass"' EXIT
+          GIT_ASKPASS="$askpass" git push origin HEAD:fix/noir-scroll-navigation-20261008

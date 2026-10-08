@@ -9,10 +9,9 @@ const sections={
  ritual:{number:'03',label:'THE RITUAL',place:'INNER FOREARM',y:-1.24,theta:-.95,r:.30,title:'Nothing rushed.<br>Nothing ordinary.'},
  booking:{number:'04',label:'BEGIN YOUR PIECE',place:'THE WRIST',y:-2.15,theta:1.02,r:.285,title:'Your story.<br>Our next chapter.'}
 };
-let section='home',engine=null,transition=null,raf=0,cam=null,lastWheel=0,wheelSum=0,lastDeltaAt=0,accent='red',reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let section='home',engine=null,transition=null,raf=0,cam=null,accent='red',reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let pointerDown=null,artOrigin=null;
 let motion=null,lastFrame=null,panelSection=null,panelExitUntil=0,assetsWarmed=false,panelNeedsContent=true;
-let wheelDirection=0,wheelConsumed=false;
 
 const cachedArt={};
 const store={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
@@ -122,27 +121,14 @@ window.addEventListener('popstate',()=>{const id=location.hash.slice(1);navigate
 window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(order.includes(id)&&id!==section)navigate(id,{history:false})});
 $('.skip-link').addEventListener('click',e=>{e.preventDefault();if(section==='home')navigate('artist',{immediate:true});scroll.focus()});
 document.addEventListener('keydown',e=>{if($('#art-dialog').open)return;if(e.key==='Escape'){if(app.classList.contains('menu-open')){$('.menu-toggle').click();return}navigate('home');return}if(e.target.closest('input,textarea,select,[contenteditable]'))return;if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();changeStep(1)}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();changeStep(-1)}else if(e.key==='Home'&&!e.target.closest('#panel')){e.preventDefault();navigate('home')}});
-// Wheel input outside a content panel triggers one section, not scroll scrubbing.
-// Wheel input INSIDE the panel never navigates, even at a scroll boundary.
-app.addEventListener('wheel',e=>{
- if(e.ctrlKey||e.target.closest('#panel,.topnav,.settings')||$('#art-dialog').open)return;
- if(Math.abs(e.deltaY)<Math.abs(e.deltaX)||!e.deltaY)return;e.preventDefault();
- const now=performance.now(),direction=Math.sign(e.deltaY);
- const newGesture=now-lastDeltaAt>190,reverse=wheelDirection!==0&&direction!==wheelDirection;
- if(newGesture||reverse){wheelSum=0;wheelConsumed=false}
- lastDeltaAt=now;wheelDirection=direction;
- if(wheelConsumed)return;
- wheelSum+=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?innerHeight:1);
- // One transition per gesture; a deliberate reverse can retarget during travel.
- if(Math.abs(wheelSum)>55&&(reverse||now-lastWheel>180)){
-  changeStep(direction);lastWheel=now;wheelSum=0;wheelConsumed=true;
- }
-},{passive:false});
-canvas.addEventListener('pointerdown',e=>{pointerDown={x:e.clientX,y:e.clientY,time:performance.now(),type:e.pointerType};canvas.setPointerCapture(e.pointerId)});
+// Boundary-aware wheel/touch navigation; the motion controller remains the sole camera owner.
+NoirScroll.install({app,content:scroll,step:changeStep,getSection:()=>section,
+ blocked:()=>!assetsWarmed||app.classList.contains('menu-open')||$('#art-dialog').open});
+canvas.addEventListener('pointerdown',e=>{if(!e.isPrimary){pointerDown=null;return}pointerDown={x:e.clientX,y:e.clientY,time:performance.now(),type:e.pointerType,id:e.pointerId,moved:false};canvas.setPointerCapture(e.pointerId)});
 canvas.addEventListener('pointerup',e=>{if(!pointerDown)return;const dx=e.clientX-pointerDown.x,dy=e.clientY-pointerDown.y;const elapsed=performance.now()-pointerDown.time;
- if(Math.abs(dy)>55&&Math.abs(dy)>Math.abs(dx)*1.2&&elapsed<950){changeStep(dy<0?1:-1)}else if(Math.hypot(dx,dy)<12&&elapsed<600&&engine){const p=engine.pick(e.clientX,e.clientY);if(p){const id=p[1]>1.13?'artist':p[1]>-.65?'work':p[1]>-1.73?'ritual':'booking';navigate(id)}}pointerDown=null});
+ if(pointerDown.type!=='touch'&&Math.abs(dy)>55&&Math.abs(dy)>Math.abs(dx)*1.2&&elapsed<950){changeStep(dy<0?1:-1)}else if(!pointerDown.moved&&Math.hypot(dx,dy)<12&&elapsed<600&&engine){const p=engine.pick(e.clientX,e.clientY);if(p){const id=p[1]>1.13?'artist':p[1]>-.65?'work':p[1]>-1.73?'ritual':'booking';navigate(id)}}pointerDown=null});
 canvas.addEventListener('pointercancel',()=>{pointerDown=null});
-canvas.addEventListener('pointermove',e=>{if(e.pointerType==='touch'||!engine)return;const top=engine.project([0,3,0]),bottom=engine.project([0,-3.6,0]);const t=Math.max(0,Math.min(1,(e.clientY-top.y)/(bottom.y-top.y)));const center=top.x+(bottom.x-top.x)*t;canvas.classList.toggle('pickable',Math.abs(e.clientX-center)<(mobile()?80:100)&&e.clientY>Math.min(top.y,bottom.y)&&e.clientY<Math.max(top.y,bottom.y))});
+canvas.addEventListener('pointermove',e=>{if(pointerDown&&pointerDown.id===e.pointerId&&Math.hypot(e.clientX-pointerDown.x,e.clientY-pointerDown.y)>=12)pointerDown.moved=true;if(e.pointerType==='touch'||!engine)return;const top=engine.project([0,3,0]),bottom=engine.project([0,-3.6,0]);const t=Math.max(0,Math.min(1,(e.clientY-top.y)/(bottom.y-top.y)));const center=top.x+(bottom.x-top.x)*t;canvas.classList.toggle('pickable',Math.abs(e.clientX-center)<(mobile()?80:100)&&e.clientY>Math.min(top.y,bottom.y)&&e.clientY<Math.max(top.y,bottom.y))});
 scroll.addEventListener('submit',e=>{if(e.target.id!=='booking-form')return;e.preventDefault();const form=e.target;if(!form.reportValidity())return;const values=new FormData(form);const result=document.createElement('div');result.className='form-result';result.setAttribute('role','status');const heading=document.createElement('b');heading.textContent='Your concept request, previewed.';const details=document.createElement('p');details.textContent=`${String(values.get('name')).trim()} · ${values.get('placement')}\n${values.get('email')}\n\n${values.get('idea')}`;details.style.whiteSpace='pre-wrap';const note=document.createElement('p');note.className='demo-note';note.textContent='NOT SENT. This demo has no booking backend. These details exist only on this screen and disappear when you leave the section.';const reset=document.createElement('button');reset.className='panel-link';reset.type='button';reset.textContent='Edit your concept request';reset.addEventListener('click',()=>{result.replaceWith(form);form.querySelector('input').focus()});result.append(heading,details,note,reset);form.replaceWith(result);scroll.scrollTop=scroll.scrollHeight});
 let resizeFrame=0;
 addEventListener('resize',()=>{

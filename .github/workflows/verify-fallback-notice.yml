@@ -1,65 +1,63 @@
-name: Verify Wizards fallback notice
+name: Verify deployed Wizards fallback notice
 on:
   push:
     branches: [fix/wizards-fallback-notice]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  verify:
+  verify_live:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
+    env:
+      WIZARDS_AUDIT_URL: https://tattoowebsite-xi.vercel.app/?v=6685731
+      WIZARDS_REQUIRE_WEBGL: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: 668573190545dbf38aef5e5055b3fc0f7744853d
           persist-credentials: false
-      - name: Reproduce baseline and build exact scoped repair
+      - name: Verify live HTML equals the exact main build
         run: |
-          python3 tools/build.py
-          cp index.html "$RUNNER_TEMP/wizards-qa01-baseline.html"
-          python3 -c "import hashlib; assert hashlib.sha256(open('index.html','rb').read()).hexdigest() == 'ab117b1265f262bce66e9d086c52054c67d4faba30334435f5271c2bc223f7fc'"
-          python3 .qa01-patch.py
-          python3 .qa01-test-ready.py
-          python3 tools/build.py
-          python3 -c "import hashlib; from pathlib import Path; data=Path('index.html').read_bytes(); assert data == Path('public/index.html').read_bytes(); assert hashlib.sha256(data).hexdigest() == '4d10c187d051b8c6cc9392c132861e7ecabee17871ee0033e0392b8d5085d587'"
-          git diff --exit-code -- src/engine.js src/mesh.js src/motion.js src/scroll.js src/artwork.js src/brand.css tools/build.py
-          node --check src/app.js
-          node --test tests/scroll.test.cjs
-          node tools/test_motion.cjs
-      - name: Install pinned browser tests
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, os, time, urllib.request
+          expected=Path('public/index.html').read_bytes()
+          assert hashlib.sha256(expected).hexdigest()=='4d10c187d051b8c6cc9392c132861e7ecabee17871ee0033e0392b8d5085d587'
+          for attempt in range(6):
+              with urllib.request.urlopen(os.environ['WIZARDS_AUDIT_URL'],timeout=30) as response:
+                  actual=response.read()
+              if actual==expected: break
+              time.sleep(5)
+          assert actual==expected, 'Public alias has not reached the verified build'
+          print('Public HTML parity:',len(actual),hashlib.sha256(actual).hexdigest())
+          PY
+      - name: Install isolated browser checks
         run: |
           python3 -m pip install playwright==1.57.0 Pillow==11.3.0
           python3 -m playwright install --with-deps chromium
-      - name: Test fallback and unchanged real WebGL appearance
-        env:
-          WIZARDS_REQUIRE_WEBGL: '1'
-        run: WIZARDS_BASELINE_HTML="$RUNNER_TEMP/wizards-qa01-baseline.html" python3 tests/fallback_notice.py
-      - name: Verify continuous wheel and touch navigation and branding
+      - name: Test live fallback layouts, dismissal, form and context loss
         run: |
-          python3 tests/browser_scroll.py
-          python3 tests/branding.py
-      - name: Save verified screenshots and result
+          python3 tests/fallback_notice.py FallbackNotice.test_02_notice_reserves_space_all_sections_and_sizes FallbackNotice.test_03_dismiss_preserves_content_route_and_reclaims_space FallbackNotice.test_04_keyboard_dismiss_restores_visible_focus FallbackNotice.test_05_menu_and_panel_scroll_with_notice_visible FallbackNotice.test_06_gallery_and_demo_form_remain_usable FallbackNotice.test_09_real_webgl_context_loss_enters_safe_fallback
+      - name: Test live uninterrupted desktop wheel and mobile touch
+        run: |
+          python3 - <<'PY'
+          import os, runpy, unittest
+          cls=runpy.run_path('tests/browser_scroll.py')['ScrollFlow']
+          original=cls.setUpClass.__func__
+          def live_setup(c):
+              original(c)
+              c.url=os.environ['WIZARDS_AUDIT_URL']
+          cls.setUpClass=classmethod(live_setup)
+          names=['test_01_rapid_notches_pass_sections_before_landing','test_02_immediate_reversal_during_motion','test_09_touch_long_drag_and_reverse_before_landing']
+          result=unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite(cls(name) for name in names))
+          assert result.wasSuccessful() and not result.skipped
+          PY
+      - name: Save live test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: wizards-fallback-notice-review
+          name: wizards-qa01-live
           retention-days: 7
           path: |
             evidence/fallback-notice/
             evidence/scroll-flow-browser.json
-            index.html
-            build-manifest.json
-      - name: Commit verified repair to review branch only
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GIT_TERMINAL_PROMPT: '0'
-        run: |
-          set -euo pipefail
-          git config user.name 'fxbillions450-pixel'
-          git config user.email '289425272+fxbillions450-pixel@users.noreply.github.com'
-          git add -- src/app.js src/styles.css src/shell.html index.html public/index.html build-manifest.json tests/fallback_notice.py
-          git commit -m 'Build verified non-overlapping and dismissible 3D fallback notice'
-          askpass="$RUNNER_TEMP/wizards-qa01-askpass.sh"
-          printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$GH_TOKEN" ;; esac' > "$askpass"
-          chmod 700 "$askpass"
-          trap 'rm -f "$askpass"' EXIT
-          GIT_ASKPASS="$askpass" git push origin HEAD:fix/wizards-fallback-notice

@@ -1,0 +1,64 @@
+name: Verify Wizards fallback notice
+on:
+  push:
+    branches: [fix/wizards-fallback-notice]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Reproduce baseline and build exact scoped repair
+        run: |
+          python3 tools/build.py
+          cp index.html "$RUNNER_TEMP/wizards-qa01-baseline.html"
+          python3 -c "import hashlib; assert hashlib.sha256(open('index.html','rb').read()).hexdigest() == 'ab117b1265f262bce66e9d086c52054c67d4faba30334435f5271c2bc223f7fc'"
+          python3 .qa01-patch.py
+          python3 tools/build.py
+          python3 -c "import hashlib; from pathlib import Path; data=Path('index.html').read_bytes(); assert data == Path('public/index.html').read_bytes(); assert hashlib.sha256(data).hexdigest() == '4d10c187d051b8c6cc9392c132861e7ecabee17871ee0033e0392b8d5085d587'"
+          git diff --exit-code -- src/engine.js src/mesh.js src/motion.js src/scroll.js src/artwork.js src/brand.css tools/build.py
+          node --check src/app.js
+          node --test tests/scroll.test.cjs
+          node tools/test_motion.cjs
+      - name: Install pinned browser tests
+        run: |
+          python3 -m pip install playwright==1.57.0 Pillow==11.3.0
+          python3 -m playwright install --with-deps chromium
+      - name: Test fallback and unchanged real WebGL appearance
+        env:
+          WIZARDS_REQUIRE_WEBGL: '1'
+        run: WIZARDS_BASELINE_HTML="$RUNNER_TEMP/wizards-qa01-baseline.html" python3 tests/fallback_notice.py
+      - name: Verify continuous wheel and touch navigation and branding
+        run: |
+          python3 tests/browser_scroll.py
+          python3 tests/branding.py
+      - name: Save verified screenshots and result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wizards-fallback-notice-review
+          retention-days: 7
+          path: |
+            evidence/fallback-notice/
+            evidence/scroll-flow-browser.json
+            index.html
+            build-manifest.json
+      - name: Commit verified repair to review branch only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          git config user.name 'fxbillions450-pixel'
+          git config user.email '289425272+fxbillions450-pixel@users.noreply.github.com'
+          git add -- src/app.js src/styles.css src/shell.html index.html public/index.html build-manifest.json
+          git commit -m 'Build verified non-overlapping and dismissible 3D fallback notice'
+          askpass="$RUNNER_TEMP/wizards-qa01-askpass.sh"
+          printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$GH_TOKEN" ;; esac' > "$askpass"
+          chmod 700 "$askpass"
+          trap 'rm -f "$askpass"' EXIT
+          GIT_ASKPASS="$askpass" git push origin HEAD:fix/wizards-fallback-notice

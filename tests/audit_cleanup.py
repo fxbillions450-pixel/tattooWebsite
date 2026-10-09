@@ -87,9 +87,30 @@ class AuditCleanup(unittest.TestCase):
         if not BASELINE.exists():self.skipTest('Baseline HTML not supplied; no visual parity claim')
         for width,height in [(320,568),(390,844),(768,1024),(1366,768),(1760,832)]:
             with self.subTest(size=(width,height)):
-                old=self.fresh(width,height,baseline=True);new=self.fresh(width,height)
-                self.assertEqual(old.evaluate(GEOMETRY),new.evaluate(GEOMETRY))
-                self.assertEqual(hashlib.sha256(old.screenshot(animations='disabled')).hexdigest(),hashlib.sha256(new.screenshot(animations='disabled')).hexdigest())
+                snapshots=[]
+                # Compare settled pages sequentially. Keeping all ten WebGL
+                # contexts alive can exhaust software-GPU resources. Save every
+                # image/state so a mismatch is inspectable, never hidden by a tolerance.
+                for baseline,label in [(True,'baseline'),(False,'fixed')]:
+                    page=self.fresh(width,height,baseline=baseline)
+                    try:
+                        page.bring_to_front()
+                        page.evaluate("""async () => {
+                            await document.fonts.ready;
+                            await Promise.all([...document.images].filter(i=>i.src).map(i=>i.decode().catch(()=>{})));
+                            await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+                        }""")
+                        image=page.screenshot(animations='disabled',path=str(OUTPUT/f'home-parity-{label}-{width}x{height}.png'))
+                        state=page.evaluate("""() => ({geometry:("""+GEOMETRY+""")(),diagnostics:window.__NOIR_TEST__,error:document.querySelector('#error-banner').hidden?null:document.querySelector('#error-banner').textContent})""")
+                        (OUTPUT/f'home-parity-{label}-{width}x{height}.json').write_text(json.dumps(state,indent=2))
+                        if os.environ.get('WIZARDS_REQUIRE_WEBGL')=='1':
+                            self.assertTrue(state['diagnostics']['webgl'],'WebGL must survive screenshot capture')
+                            self.assertIsNone(state['error'])
+                        self.assertFalse(state['diagnostics']['transitioning'])
+                        snapshots.append((state['geometry'],hashlib.sha256(image).hexdigest()))
+                    finally:
+                        page.close();self.pages.remove(page)
+                self.assertEqual(snapshots[0],snapshots[1])
     def test_04_browser_back_closes_each_gallery_and_restores_route_focus(self):
         page=self.page
         for kind in ['rose','moth','skull','dagger']:

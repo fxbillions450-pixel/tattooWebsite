@@ -57,6 +57,32 @@ body.reduce-motion *,body.reduce-motion *:before,body.reduce-motion *:after{tran
 }
 
 
+/* QA-01: no-WebGL status gets its own intrinsic-height row. These rules
+   never apply to the approved 3D composition or its scroll/camera hot path. */
+#app.no-webgl{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"header" "notice" "content" "footer";min-height:0}
+.no-webgl .topbar{position:relative;grid-area:header}
+.no-webgl .error-banner{grid-area:notice;position:relative;inset:auto;transform:none;max-width:none;margin:0 max(5%,env(safe-area-inset-right)) 8px max(5%,env(safe-area-inset-left));padding:8px 8px 8px 14px;display:flex;align-items:center;gap:12px;text-align:left}
+.no-webgl .error-banner[hidden]{display:none}
+.no-webgl #error-message{margin:0;min-width:0;flex:1;line-height:1.5;overflow-wrap:anywhere}
+.no-webgl #dismiss-error{flex:0 0 44px;width:44px;height:44px;padding:0;font-size:22px;border:1px solid var(--line);border-radius:2px}
+.no-webgl #dismiss-error:hover{border-color:var(--accent)}
+.no-webgl #dismiss-error:focus-visible{outline-offset:2px}
+.no-webgl #main-content{grid-area:content;position:relative;min-width:0;min-height:0}
+.no-webgl .return-overview{top:0;min-height:40px}
+.no-webgl #panel{top:44px;bottom:8px;max-height:none}
+.no-webgl .panel-shell{height:100%;max-height:100%;min-height:0;display:flex;flex-direction:column}
+.no-webgl .panel-top{flex:0 0 auto}
+.no-webgl .panel-scroll{flex:1;min-height:0;max-height:none}
+.no-webgl .hero{top:8px}
+.no-webgl .hero h1{font-size:clamp(54px,10svh,110px)}
+.no-webgl .model-meta,.no-webgl .location-caption,.no-webgl #connector,.no-webgl .scroll-cue{display:none}
+.no-webgl .bottom-bar{grid-area:footer;position:relative;left:auto;right:auto;bottom:auto;margin:0 max(5%,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(5%,env(safe-area-inset-left))}
+@media(max-height:480px){
+ .no-webgl .hero h1{font-size:clamp(24px,8svh,40px);margin:8px 0}
+ .no-webgl .hero .intro{display:none}
+}
+
+
 /* Wizards Tattoos branding only; scene, palette and motion are unchanged. */
 .brand{gap:12px;flex-shrink:0;min-width:0}
 .brand-logo{display:block;width:48px;height:48px;object-fit:contain;flex-shrink:0;border-radius:50%}
@@ -84,6 +110,7 @@ body.reduce-motion *,body.reduce-motion *:before,body.reduce-motion *:after{tran
 <a class="book-nav" href="#booking" data-section="booking">START A PIECE <span aria-hidden="true">↗</span></a>
 <button class="menu-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="main-nav"><i></i><i></i></button>
 </header>
+<div class="error-banner" id="error-banner" role="region" aria-label="3D availability notice" hidden><p id="error-message" role="status"></p><button id="dismiss-error" type="button" aria-label="Dismiss 3D notice"><span aria-hidden="true">×</span></button></div>
 <main id="main-content">
 <div class="hero" id="home-content"><div class="eyebrow"><span class="tiny-square"></span>THE BODY IS THE CANVAS.</div><h1><span>INK.</span><span>BEYOND</span><span class="outline">SKIN.</span></h1><p class="intro">Some stories aren't told.<br>They're worn. Explore a different<br>kind of tattoo experience.</p><button class="explore" data-section="artist"><span class="circle-arrow" aria-hidden="true">↘</span>EXPLORE THE SLEEVE</button></div>
 <div class="model-meta" aria-hidden="true"><b>FIG. 001</b> / THE SLEEVE<br>BLACKWORK · IN THREE DIMENSIONS</div>
@@ -95,7 +122,7 @@ body.reduce-motion *,body.reduce-motion *:before,body.reduce-motion *:after{tran
 <div class="scroll-cue"><svg viewBox="0 0 13 20" aria-hidden="true"><rect x="2" y="1" width="9" height="17" rx="4.5"/><path d="M6.5 4v4"/></svg>SCROLL TO DISCOVER · CLICK A TATTOO TO ENTER</div>
 </main>
 <footer class="bottom-bar"><div class="prototype-mark"><strong>WIZARDS TATTOOS.</strong>DESIGN PROTOTYPE / NOT A LIVE STUDIO</div><nav class="section-nav" aria-label="Section navigation"><button data-section="home" aria-label="Overview" aria-current="page">00</button><span class="step-line"></span><button data-section="artist" aria-label="The artist">01</button><button data-section="work" aria-label="Selected work">02</button><button data-section="ritual" aria-label="The ritual">03</button><button data-section="booking" aria-label="Start a piece">04</button></nav><div class="settings"><div class="arrows"><button id="prev" aria-label="Previous section" disabled>←</button><button id="next" aria-label="Next section">→</button></div></div></footer>
-<div id="status" class="sr-only" role="status" aria-live="polite"></div><div class="error-banner" id="error-banner" hidden></div>
+<div id="status" class="sr-only" role="status" aria-live="polite"></div>
 <div class="loading" aria-live="polite"><div class="loading-brand" aria-label="Wizards Tattoos"><img class="brand-logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/7QCEUGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAGgcAigAYkZCTUQwYTAwMGFkYzAxMDAwMDFjMDMwMDAwY2QwNDAwMDBkOTA0MDAwMGU1MDQwMDAwOGMwOTAwMDBmMjBlMDAwMDRiMGYwMDAwNTcwZjAwMDA2MzBmMDAwMGVjMTMwMDAwAP/bAIQABQYGCwgLCwsLCw0LCwsNDg4NDQ4ODw0ODg4NDxAQEBEREBAQEA8TEhMPEBETFBQTERMWFhYTFhUVFhkWGRYWEgEFBQUKBwoICQkICwgKCAsKCgkJCgoMCQoJCgkMDQsKCwsKCw0MCwsICwsMDAwNDQwMDQoLCg0MDQ0MExQTExOc/8IAEQgAlgCWAwEiAAIRAQMRAf/EAKcAAQACAwEBAAAAAAAAAAAAAAAFBwMEBgIBEAACAgIBAgUEAwAAAAAAAAACAwABBBIREyAQFCEiMCMyM2AFMVARAAECAgUHCAgFAwUAAAAAAAECEQAhEiIxQVEDQmFxgZGhEDJSYnKxwdEgMDOCksLw8UNzstLhE1BTBIOio9MSAQABAwMCBQUBAQAAAAAAAAERACExQVFhcYEQkaGx8CAwweHx0VD/2gAMAwEAAgADAAAAAaYAAAAAAAAAuemLnKYAAJAj97oNI1vmbaNCPk9w5h1PPmsABc9MXOUwASBsyHzWMfjW8GXL7yGhI+4okt+J+mpo9dy5hAuemLnKYA67n5M14/3pifgrKK2y95HEX9mpIrSahvJNbMX0ByD78Fz0xc5TAJjz9+HjzHyBi7bDLnr7OfTnPMNvkJFdDy5inOflyN1pGOFz0xc5TAJjzoz5zGzgmCGm8fk35HmvRZXNw2saepIZiJ6nluvOWwguemLnKYA6rldk+zufmSUzyXg0N7BnNX7hzmDP6gDazyXInwC56YucpgAG90XH5iYjZjaOc+zGqR/qdymrtxsGZcIALnpi5ymAAAPvwbOxHDNhAAABc9MXOUwucUwucUwucUwucUwucUwucUwucUwucUwucUxc4f/aAAgBAQABBQL/ADVoM55WeXqeUKGsg+VaLOUArjMmrlPbxvk8284vJGGgSjF2u/hQjmNfpBTZWsxCBkEI+aLknEQ8gyWBJsCFgtVp8CF729usWIrjHWUUq2XbACDlFK1ZTVWEVkcQhuVYtEwsL7grpCitzYW1xnsXVczjidCqpV0dzFZfNXSjyg9O1C9zymc11b18MhvRAUcPx8huQeSiKwemV+DH2cX9QO3FmX9+OjrE5PTiaKz6vC8l8Cw1ew9cfbXPxqXY4xELAsLxC4po6l2Y/wDWZ+WJVbb4rFr+NNbL6AxtVDGuqJUIZzuoNOOoRWV4/wBuT+XsxPuyvUoLSHwxi4rRsx2Uu2gtszgBcaze/DDH0Mtr7FnoWSHtl4sLG4usfkmp0ho1pYFrSyOzRY2WNwM/GHcg6IWLtZC+uOpsdGO52F2TQOAwRrcdjbWzWjrjh65Z962WuzAWDQ8EyuKpoxZ+27+o/iNrYmcEKlWyyOlD8Cm6S6FtOtlVTiqltIJTiqG0jhuIpwbKMhVRnZ38IHYWGVU6QMhYdVPL1Bw6nsVDy/nFpDPMthHZf5//2gAIAQMAAT8B/ZP/2gAIAQIAAT8B/ZP/2gAIAQEBBj8C/ttVJIxu32RNeTHvA/pePa5P/l+2KpQrUod1sVgU65etfmpFqjZ/J0CH5vWygdR7OT/dviwr05Q/KGA4w6Qw6qAPCGdT2xWSlWtA7wxhpo0e0yfwq/mHkjrJrZI/MnbDKDeqpKdnZKRas4DxMXFYsbmZPQkXnrfeHWede7lyJPfOMolQpPY2jTBQLCX3RdqYNa/eIokycq2mEpCWIDDrKLW6LTCig0gmSi0tRF8M0rTk704qyfin7jFJmlWI9ROSUzUdHmbBDWLIZv8AGi5I0nO+8UlMQRhSonAiU2hs24d072EMNZJsAxMVE0usvwTZveJzToSgfKRDrSEO7LTKacU2bmjEGxQsMUVGoS5H1x1R/UTJp1c3A6Hwickk1uou5Y6qr/tBBtHpzzWyitKj7NO6tvikV0VTUFEO5E98PLZyBAtUAtfyjcX2xKGLjzimuqkiQBck/Uzug5O5XN7YEj71h18lC5WN2yx5XxigyVqvGGow9pRUUcQ1RW1Pd6SU3Ez1X8IHXJyh2ySNgHGKN10rOV0h6TJLzFWqRqq/UoWsplMolK0Dh3wUGv8A1AqWBZw2AlCahqoCZh7U3fVsJN6CSo2iQGPKBIAXCB1kqye1FdHl6Szhk1cRR8YbohKdyRFFwmTzgXvoaE0RSU8hC6JSqu7KQStJ/Tth0EkpaRTfN9hAL6UwFpSE5RVZYFISButITjLhACFhLB1uoOl8GuLvi5sgk5U5R2YXzcZ1rsQ38RSSCEqxlcD47IpBm16/KCk2iD1V5NXFvGFDAkbvRyv5fzJhfa5NA28LzAVZSk8ln9g1ClC5Dm2FKcRgyeECoLvwk469MCqUlraswPfSwGEf6jJrespxmvW0wKaKCUWUw5WbmYpMtzaYCqTldHQalIE8QBjDUi338zDmZjKak/rTGU7au/0SnpIUOEuMBXSSk8GPEchAJFK3TyLAISssz2SLkYYWxmSHSR0aOOEV10lKI5psumeZ3wp64yag6n5o13yfdKbwh0Hm1RSqs528Zw9mAwAu5e1lEbkupXhBOJf0Qrol90SzDLsZSsnx5OcML/KGpJsJvu2QoOKuuLRa26HcXY50FIWwygBI1GXGGKuYwDuZE3aJwBJT2NFKkC2u/k7CG9/LeWT9OeYKKvy1X+4qcEH76YEw8m6qhfuAG+FFwAxA3MIWaVt+i/b94TMS7hYG+tMNSGGsKtuuMc4c1r+kYJpCdHgbpWMIDF6ySS3Rgsbc0O3GKRDpTd0jcnb3RQtIcrOK1W7rPTChAaz8Mm4/41fKfoMqU5wtJaQLMzY67PvFLNv2UfOXGHlnZr5yfOFDQm6do84eUiLmdxh9WwAcVyxazfAsswsqpPi0MNpuAxMAj/bF87codPR+n9Rik85JsMO5IGdno0LF6esP4ic0m9LMdo7oo3TuF8SME42vOJmJ3TwmdUCmaKLpTVqFp7oZtWTtnjlDj1fokkuT6pwWMTqE2lLMe0g1TwiQSfy1UT8C/CLVp7WTPg8e0Hwr/bH4itSKI+JR8IzU/wDcv/zEVJE2rJpLO27Z6+SiNRaPaL+IxMk6/wC3/wD/2gAIAQECAT8h/wCbd+ELO78qkeWrKf61cnqvfMnopWFNg+77pC0srMOxrwC9qDIEsdZMAbMii+aYSnZegmkoQ2JCF0kl61wIskbDDxm0Zm1ZRnE1jBktmoF59x1vHUVRWowyjZyvEugVdgRJqI4RLI7lvtBEE/0DgdjBepwGNgkuqNxTe5LU0/oL21xqlMUXo8mRMoTZMOzFzUgchS1GGPIrKjFN0CYxMD2jFq1QE5gz5W6tARCGmFIlRAHIu00lrdAnUyDhxqDSgTMi7jbxqnqUuy4WBj8SYRuNvsCi4XGGhyRyO1PaIuDU8kMrN4btTDUUQyysbnlm2sbCDoSBIGE4BKxpVgABgBZTb1WxerGD2pn0R3OmKzSBZBLjH4kXigAJHGEEpJuNW9pxSpcHN4PHTUYTUpgOfWLZFJiEywvRYhUHfAkEdSxKelObCo6P2GA6VAuFROT6wGAwA9WcFw2RTdwQBPyw35ipWAnYgu8aTnwCVVHMAzgMAKXPCkQBVsBdaJl4ZkibJgiTW3FaQalJQQSuO1yaNZB9lkTMSIJ9B4CuBb1CkZEk0AbCrPmYVrq0xdGQtINWU5R1E9I7N/qm7A6MvcpNOlOp7xRSeVE4IyZYYknW9/AJtvUsBNQIJwHURjW64hixoLElhoqY7Gl8lGQQCvNQCYjmEbAMkhZMHSZmIuV3PzNCSEuJvFrb4q58C00MIJ1Y3ZvFuKtOVTtJ84Pqsd+nWhsf6pPea3hEpRbS2+nNa9ASMqGjwESVRmpxOnObljUYYEjDMTFLjhBlp4UvNbpRgaPKylbIgX0iDucaNJ8ZJ2XCTABiwxVqLEql3hw3G5dxIovrBVOAOBMLyEms8Du7Pi5ULGpDJUw/Xt+yv67hPp9Wr9SoYqGTFxb5IQCVHAZ6SkEFlAExCirt2FouaC9Isk2pFWpvM4bNCIYJHWA+o+dWxAmGOZeJpN2NpoEBWuiQmJMXFibMZxQ7e+oicwJZjmwknZTRJhktrgqwvcaEAAIibR8HekCqZW60fJe9Xym/6bv9VrfQK/oPj6l4ElogjEOfCIkZ4iLgbFRGFmsbEIDDEPRed81BggA8JyBO4kJM1BWHBULdg3ELLlhcknvEdiOG+6pcvaneALAYtATofvxsJwL5ixSRcp5mfpYrIDumj4ffT2UPKFBLtSgs8LyJe3QMNXP6QcLrlzinJxJbi/a0azUHMygDO5uRE2mc0t9QONUJIUhwzRTd0K80FjN1i9Kr8AWgLJy9VEBkwlZWN40R70zWIKGhQONdN/BJ9/yLyL7J9eqcgmVphz6g0GtILUwG4OEuUiYnKxjo8Qw182VFxB5MksAou/arQSQAkvyLYwBOu6rH0s3SKbBiW2s5o4ogzZYE+TJzjeis9M3GI2ZWbkmaI9YNMXFRAs4JttR4UQCAQAgi2qgRgvQROJl4JRNhDLIDxNw1WxeT7zPBaQRMn4i4dqmfrzEGjcRsiaiWTapVQrK5lut0tflrCEwgGyXubzQCpSAuEnFltracqQAIAwgm4xtN2y5uq6Ebq4BhEi9lHXi0AosMQ7uImFLz5Fb8FIrhw0gbnkiggkTQAdAJpCA0ogOuyQmBxu4LXNSrAACUsLKbe+C9W1YGboD0WDpnSfs3bYLGA/hMiXHFWzCRGYcAxaYKxdkqCu2WwdWx3KgJLBqRleJvWi08D70hNLpCUM6m9IDMnB7VAqukQG4bC9qLq7Z6Rxd6Sy1OpIvL0DZ2HGsXqgZEq/aCOLCMNX0XCa+aI7K1AuvmX+ErIdD/AFZo/wA+emyLf2MFDefj3be4UkqH5CXoJtL9/wBbs9jXyn81cmOS+/8Az//aAAwDAQACAAMCAAAQ888888888o884wM4088o84sw4okQ8o88UwIAM40o8UIkgcw88o840QwI0oco8sUw4YAQ8o88IU80o88o888s8c888owwwwwwwwwg/9oACAEDAAE/EP2T/9oACAECAAE/EP2T/9oACAEBAgE/EP8Ami7iWOtAO9D4hKtQfqz3hUvsNdf5r6x6QJ7fdaxd0ylqYmOA5Vb5nvLdZCWaODdMVCLOunZZdcpyW2F5il7oE18JLP5/ayp/7g/GQrg91sUxsdiuGpnacit/tAfPVN0W+Y6GmpBJbEH0OYRnHqTl4NT1pe1eAU3uaoXhC5gvpaWrMrzF3ts1QHJnLL89GDRTWouTycuIiJi1iFndh94og3GlX9mNWMcIn3oGRO6OWTn61IQ5yoLlpINqcvAyQpVU1s9QXQIwP9BSUl0W3GUjFFL/ABS3ZQCTdACgbP3mrWxy/wAgZlBid07cxtAki9jBUpFlheqLIqxl2CgiduL8pAlsEMCsKPuqh6bWG2HhiENi6k11tEh/v2KwbXJBrUgXeDcMlmVM1BfqO+oCC9gx4eqEkogRsF1P0eAUOAC61yNDUMjrJ3PRwDlDegHoegoxJW331NgB5epB+YfeiIOTFGcOAv7qRusg8fpR+ri1gTZudgqkHo5HRLoCibMeQqkLyXuMEUzAS2By15/VABDD3WUG+LrB4B30QjER8YxYEKQLH4cta85YpEuNiIfLr3ciikcSr4BeBznc6F0GGgj50qlvj9QP0nEoNqK736KO1k40e5h0CmV9bQBhLzjrUonYrFIOl+KfoDdpFxi4fRypzwID2RgsTkCupm90wP4iM3FwFiowPuDjEAfQEFQKaGw4Ja/BpfZMbAmzrZr5Ihe5VEfxk8vpE/GhPah317Nz0pMGKhW0QoonCpGngPAfCl3SgXevFhyBFABmT5VdccVxJVFTqFFyBo3BlPWlFWtMB14E9Z3SDdxjmwo0EbOAdA+WVOlGVSOWmf6J/hTn6TZGaXV3n4NhCXMjKBpDS75pU0coxPyKxpgTMUf7QJh8HWawXBf7aj2EeAX5QuuIoGlbwbWKZdQAI2Ll0VlTB3WVdfHmz6UEzRXVvy+nzT7kId4rfneasAkQSSQlwctY8JrUfYKMDHSV3iv8IHfvrTiBMAdww4A+t0bVp0cwGBqbMMHbkLCQz7ASoiHbidm17EaMJoEECLUtDOoNIZsALMhtEy2h0buUC4NpXYGPC5LM9g+sl/ZrTotVKjCXG8VK6vG2amzQXaDe2oirJZvMAA7JwtX6HRRb0N6VLUp9lXAQ81YgD3U5HDO3dX3ijbTrBWl6Ejpd4mKCHSQxWNaVZJC8vlNMUG4qD2EhDt46F8AoxsRD68Rk3bEM3c7rk1kaXoC3Tho4wnOEQwp1KMzsZf8Abe/sOGgHLJBkb2JC0xQ9wF6veAA2ppN/ZZ8RRCmTzDfCpMxoWRj72kFV5+CgvUA81AKB+esGMex1iz9gdzFHUxdHLLlRRxYaZnhvZiDULij5kAGh8RvUvvEIJxNjDH+VHTF2sGaIBjapykksEuWBEsEusE0uTJl/B1QRWE68jt/XBPhbmBlOa9ZzL8sBYLFvtIbuVg7nrvTfgBwV+9XzuH/CqfAY9ZUt9w05HwiCoK5D7zsXTmoP6VALH3FUs/esnzmsU1NR5KV9T/z/AP/Z" alt="" width="150" height="150" decoding="async"><span class="wordmark brand-name"><span>WIZARDS<span class="slash" aria-hidden="true">/</span></span><span class="brand-subtitle">TATTOOS</span></span></div><span>FORMING THE EXPERIENCE</span><div class="loading-line"><i></i></div></div>
 </div>
 <dialog id="art-dialog" aria-labelledby="dialog-title"><div class="dialog-bar"><span id="dialog-title">SLEEVE STUDY</span><button id="close-dialog" aria-label="Close artwork">×</button></div><img class="dialog-art" alt="Original ornamental tattoo concept artwork"><p class="dialog-caption">Original procedural artwork. A visual study, not a photograph of a completed tattoo.</p></dialog>
@@ -735,7 +762,19 @@ document.addEventListener('visibilitychange',()=>{
  if(document.hidden){if(raf)cancelAnimationFrame(raf);raf=0}
  else if(transition)requestFrame();else draw();
 });
-canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();$('#error-banner').textContent='The 3D context was interrupted. Navigation and section content are still available. Reload to restore the arm.';$('#error-banner').hidden=false;app.classList.add('no-webgl');transition=null;cancelAnimationFrame(raf);raf=0;engine=null;finish()});
+// Fallback notices occupy a layout row, never an overlay. Dismissal is local
+// to this page; it does not hide future context-loss messages or change motion.
+function showFallbackNotice(message){
+ app.classList.add('no-webgl');
+ $('#error-message').textContent=message;
+ $('#error-banner').hidden=false;
+}
+$('#dismiss-error').addEventListener('click',()=>{
+ const notice=$('#error-banner'),hadFocus=notice.contains(document.activeElement);
+ notice.hidden=true;
+ if(hadFocus)document.querySelector('.section-nav [data-section="'+section+'"]')?.focus({preventScroll:true});
+});
+canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();showFallbackNotice('The 3D context was interrupted. Navigation and section content are still available. Reload to restore the arm.');transition=null;cancelAnimationFrame(raf);raf=0;engine=null;finish()});
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',e=>{reduceMotion=e.matches;updateMotion()});
 // Read-only diagnostics used by the included browser regression tests.
 Object.defineProperty(window,'__NOIR_TEST__',{get:()=>({section,transitioning:!!transition,camera:{...cam},motion:motion?.snapshot(),panelSection,assetsWarmed,frames:engine?.frames||0,webgl:!!engine,accent,reduceMotion,panelVisible:app.classList.contains('panel-visible'),vertices:window.NOIR_MESH.vertexCount,triangles:window.NOIR_MESH.triangleCount,renderInfo:engine?.diagnostics})});
@@ -743,7 +782,7 @@ window.__NOIR_PROJECT_POINT__=p=>engine?.project(p);
 async function start(){
  cam=pose('home');motion=new NoirMotion.Controller(cam);cam=motion.pose;
  try{const texture=NoirArt.makeTexture(mobile());engine=NoirEngine.create(canvas,texture);draw()}
- catch(error){console.error('NOIR 3D setup:',error);app.classList.add('no-webgl');$('#error-banner').textContent='3D is unavailable in this browser. All sections remain accessible from the menu.';$('#error-banner').hidden=false}
+ catch(error){console.error('NOIR 3D setup:',error);showFallbackNotice('3D is unavailable in this browser. All sections remain accessible from the menu.')}
  for(const kind of ['rose','moth','skull','dagger']){
   const image=new Image();image.src=study(kind);
   try{await image.decode()}catch{/* The cached data URL remains usable as a fallback. */}

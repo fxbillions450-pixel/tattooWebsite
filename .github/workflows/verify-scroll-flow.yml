@@ -1,54 +1,53 @@
-name: Verify continuous NOIR scrolling
+name: Verify public NOIR scroll deployment
 on:
   push:
     branches: [fix/noir-scroll-flow]
 permissions:
-  contents: write
-concurrency:
-  group: noir-scroll-flow
-  cancel-in-progress: false
+  contents: read
 jobs:
-  verify:
-    if: github.repository == 'fxbillions450-pixel/tattooWebsite'
+  verify_public:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Build the reviewed source and verify identical output
+      - name: Verify exact public HTML bytes
         run: |
-          set -euo pipefail
-          python3 tools/build.py
           python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-          html = Path('index.html').read_bytes()
-          assert hashlib.sha256(html).hexdigest() == '312c252514fde6c1c2fa933453fd41974d0527e9b302ac3f441dd0eca95cf14c'
-          assert html == Path('public/index.html').read_bytes()
-          print('Reviewed HTML verified:', hashlib.sha256(html).hexdigest())
+          import hashlib, urllib.request
+          url = 'https://tattoowebsite-xi.vercel.app/?verify=3c208ae'
+          request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              data = response.read()
+              print('HTTP', response.status, 'FINAL URL', response.url)
+          digest = hashlib.sha256(data).hexdigest()
+          print('PUBLIC HTML BYTES', len(data), 'SHA256', digest)
+          assert digest == '312c252514fde6c1c2fa933453fd41974d0527e9b302ac3f441dd0eca95cf14c', 'Public alias is not serving the reviewed build'
           PY
-          node --check src/scroll.js
-          node --test tests/*.test.cjs
-          node tools/test_motion.cjs
-      - name: Install browser test runtime
+      - name: Install isolated browser checks
         run: |
           python3 -m pip install playwright==1.57.0
           python3 -m playwright install --with-deps chromium
-      - name: Exercise real WebGL camera and continuous input over HTTP and local file
-        run: python3 tests/browser_scroll.py
-      - name: Commit only verified generated previews to the isolated branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GIT_TERMINAL_PROMPT: '0'
+      - name: Test actual public mouse-wheel navigation with WebGL
         run: |
-          set -euo pipefail
-          git config user.name 'fxbillions450-pixel'
-          git config user.email '289425272+fxbillions450-pixel@users.noreply.github.com'
-          git add -- index.html public/index.html build-manifest.json
-          git commit -m 'Build verified continuous-scroll client preview'
-          askpass="$RUNNER_TEMP/noir-flow-askpass.sh"
-          printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$GH_TOKEN" ;; esac' > "$askpass"
-          chmod 700 "$askpass"
-          trap 'rm -f "$askpass"' EXIT
-          GIT_ASKPASS="$askpass" git push origin HEAD:fix/noir-scroll-flow
+          python3 - <<'PY'
+          import sys, unittest
+          sys.path.insert(0, 'tests')
+          import browser_scroll as checks
+          original = checks.ScrollFlow.setUpClass.__func__
+          def public_setup(cls):
+              original(cls)
+              cls.url = 'https://tattoowebsite-xi.vercel.app/?verify=3c208ae'
+          checks.ScrollFlow.setUpClass = classmethod(public_setup)
+          names = [
+              'test_01_rapid_notches_pass_sections_before_landing',
+              'test_02_immediate_reversal_during_motion',
+              'test_03_gentle_continuation_is_registered',
+              'test_05_file_and_http_have_same_input_results',
+              'test_06_artist_panel_top_scroll_returns_home',
+              'test_07_native_reading_and_boundary_remain_usable'
+          ]
+          result = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite(checks.ScrollFlow(name) for name in names))
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PY

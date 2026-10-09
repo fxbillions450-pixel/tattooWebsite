@@ -63,8 +63,14 @@ function finish(){
  updateOverlay();
 }
 function requestFrame(){if(!raf&&!document.hidden)raf=requestAnimationFrame(animate)}
+function dismissArtworkForNavigation(id){
+ const dialog=$('#art-dialog');if(!dialog.open)return;
+ artOrigin=null;dialog.close();
+ document.querySelector('.section-nav [data-section="'+id+'"]')?.focus({preventScroll:true});
+}
 function navigate(id,{history=true,immediate=false}={}){
  if(!motion||!order.includes(id))return;
+ if(id!==section||!history)dismissArtworkForNavigation(id);
  // Repeated clicks and popstate/hashchange for the same target are idempotent.
  if(id===section&&!immediate){if(!transition&&id!=='home'&&!app.classList.contains('panel-visible'))finish();return}
  if(panel.contains(document.activeElement))document.querySelector('.section-nav [data-section="'+id+'"]')?.focus({preventScroll:true});
@@ -122,7 +128,11 @@ document.addEventListener('click',event=>{
 });
 $('.menu-toggle').addEventListener('click',()=>{const open=!app.classList.contains('menu-open');app.classList.toggle('menu-open',open);$('.menu-toggle').setAttribute('aria-expanded',String(open));$('.menu-toggle').setAttribute('aria-label',open?'Close navigation':'Open navigation')});
 $('#prev').addEventListener('click',()=>changeStep(-1));$('#next').addEventListener('click',()=>changeStep(1));
-$('#close-dialog').addEventListener('click',()=>$('#art-dialog').close());$('#art-dialog').addEventListener('close',()=>artOrigin?.focus());
+$('#close-dialog').addEventListener('click',()=>$('#art-dialog').close());$('#art-dialog').addEventListener('close',()=>{
+ const dialog=$('#art-dialog');if(dialog.open)return;
+ const origin=artOrigin;artOrigin=null;
+ if(section==='work'&&origin?.isConnected&&!origin.closest('[inert],[hidden]')&&origin.getClientRects().length&&getComputedStyle(origin).visibility==='visible')origin.focus({preventScroll:true});
+});
 $('#art-dialog').addEventListener('click',e=>{if(e.target===$('#art-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});
 window.addEventListener('popstate',()=>{const id=location.hash.slice(1);navigate(order.includes(id)?id:'home',{history:false})});
 window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(order.includes(id)&&id!==section)navigate(id,{history:false})});
@@ -136,7 +146,21 @@ canvas.addEventListener('pointerup',e=>{if(!pointerDown)return;const dx=e.client
  if(pointerDown.type!=='touch'&&Math.abs(dy)>55&&Math.abs(dy)>Math.abs(dx)*1.2&&elapsed<950){changeStep(dy<0?1:-1)}else if(!pointerDown.moved&&Math.hypot(dx,dy)<12&&elapsed<600&&engine){const p=engine.pick(e.clientX,e.clientY);if(p){const id=p[1]>1.13?'artist':p[1]>-.65?'work':p[1]>-1.73?'ritual':'booking';navigate(id)}}pointerDown=null});
 canvas.addEventListener('pointercancel',()=>{pointerDown=null});
 canvas.addEventListener('pointermove',e=>{if(pointerDown&&pointerDown.id===e.pointerId&&Math.hypot(e.clientX-pointerDown.x,e.clientY-pointerDown.y)>=12)pointerDown.moved=true;if(e.pointerType==='touch'||!engine)return;const top=engine.project([0,3,0]),bottom=engine.project([0,-3.6,0]);const t=Math.max(0,Math.min(1,(e.clientY-top.y)/(bottom.y-top.y)));const center=top.x+(bottom.x-top.x)*t;canvas.classList.toggle('pickable',Math.abs(e.clientX-center)<(mobile()?80:100)&&e.clientY>Math.min(top.y,bottom.y)&&e.clientY<Math.max(top.y,bottom.y))});
-scroll.addEventListener('submit',e=>{if(e.target.id!=='booking-form')return;e.preventDefault();const form=e.target;if(!form.reportValidity())return;const values=new FormData(form);const result=document.createElement('div');result.className='form-result';result.setAttribute('role','status');const heading=document.createElement('b');heading.textContent='Your concept request, previewed.';const details=document.createElement('p');details.textContent=`${String(values.get('name')).trim()} · ${values.get('placement')}\n${values.get('email')}\n\n${values.get('idea')}`;details.style.whiteSpace='pre-wrap';const note=document.createElement('p');note.className='demo-note';note.textContent='NOT SENT. This demo has no booking backend. These details exist only on this screen and disappear when you leave the section.';const reset=document.createElement('button');reset.className='panel-link';reset.type='button';reset.textContent='Edit your concept request';reset.addEventListener('click',()=>{result.replaceWith(form);form.querySelector('input').focus()});result.append(heading,details,note,reset);form.replaceWith(result);scroll.scrollTop=scroll.scrollHeight});
+// Native required/minlength checks count whitespace. Validate meaningful text
+// without rewriting the draft, so Edit returns exactly what the visitor entered.
+function validateBookingText(field){
+ const value=field.value.trim();
+ const error=field.name==='name'&&!value?'Please enter your name, not just spaces.':field.name==='idea'&&value.length<10?'Please describe your idea using at least 10 characters, excluding leading and trailing spaces.':'';
+ field.setCustomValidity(error);
+ if(error)field.setAttribute('aria-invalid','true');else field.removeAttribute('aria-invalid');
+}
+function refreshBookingValidity(event){
+ const field=event.target;
+ if(field.matches('#booking-form input[name="name"],#booking-form textarea[name="idea"]')&&field.validity.customError)validateBookingText(field);
+}
+scroll.addEventListener('input',refreshBookingValidity);
+scroll.addEventListener('change',refreshBookingValidity);
+scroll.addEventListener('submit',e=>{if(e.target.id!=='booking-form')return;e.preventDefault();const form=e.target;for(const name of ['name','idea'])validateBookingText(form.elements.namedItem(name));if(!form.reportValidity())return;const values=new FormData(form);const result=document.createElement('div');result.className='form-result';result.setAttribute('role','status');const heading=document.createElement('b');heading.textContent='Your concept request, previewed.';const details=document.createElement('p');details.textContent=`${String(values.get('name')).trim()} · ${values.get('placement')}\n${String(values.get('email')).trim()}\n\n${String(values.get('idea')).trim()}`;details.style.whiteSpace='pre-wrap';const note=document.createElement('p');note.className='demo-note';note.textContent='NOT SENT. This demo has no booking backend. These details exist only on this screen and disappear when you leave the section.';const reset=document.createElement('button');reset.className='panel-link';reset.type='button';reset.textContent='Edit your concept request';reset.addEventListener('click',()=>{result.replaceWith(form);form.querySelector('input').focus()});result.append(heading,details,note,reset);form.replaceWith(result);scroll.scrollTop=scroll.scrollHeight});
 let resizeFrame=0;
 addEventListener('resize',()=>{
  if(resizeFrame)return;

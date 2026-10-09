@@ -14,9 +14,8 @@ let pointerDown=null,artOrigin=null;
 let motion=null,lastFrame=null,panelSection=null,panelExitUntil=0,assetsWarmed=false,panelNeedsContent=true;
 
 const cachedArt={};
-const store={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
-const savedColor=store.get('noir-accent');if(savedColor==='purple')accent='purple';
-if(store.get('noir-reduced-motion')==='true')reduceMotion=true;
+let panelAnchor=null;
+const connectorPath=$('#connector path');
 const mobile=()=>innerWidth<=760;
 function pose(id){if(id==='home')return{theta:.39,phi:.025,radius:mobile()?14.6:11.9,y:-.25,sx:mobile()?-.40:-.40,sy:mobile()?.15:0};const s=sections[id];return{theta:s.theta,phi:id==='booking'?-.1:.015,radius:mobile()?5.4:(id==='booking'?4.2:5.05),y:s.y,sx:mobile()?-.04:.47,sy:mobile()?-.46:0}}
 function surface(s){return[Math.sin(s.theta)*s.r+(s.y>1?-.07:.07),s.y,Math.cos(s.theta)*s.r*.90]}
@@ -43,15 +42,14 @@ function mountPanelContent(){
  const s=sections[section];
  $('.section-number').textContent=s.number;$('#panel-label').textContent=s.label;
  $('.big-index').textContent=s.number;$('.location-name').innerHTML=s.place+'<br>'+s.label;
- scroll.innerHTML=markup(section);scroll.scrollTop=0;
+ scroll.innerHTML=markup(section);scroll.scrollTop=0;panelAnchor=null;
  panelSection=section;panel.dataset.contentSection=section;panelNeedsContent=false;
 }
 function panelVisibility(show){
  const wasVisible=app.classList.contains('panel-visible');
  if(!show&&wasVisible)panelExitUntil=performance.now()+(reduceMotion?0:220);
- app.classList.toggle('panel-visible',show);
- panel.inert=!show||!!transition;
- panel.setAttribute('aria-hidden',show?'false':'true');
+ if(wasVisible!==show){app.classList.toggle('panel-visible',show);panel.setAttribute('aria-hidden',show?'false':'true');}
+ const inert=!show||!!transition;if(panel.inert!==inert)panel.inert=inert;
 }
 function revealPanel(now,force=false){
  if(section==='home')return;
@@ -91,29 +89,38 @@ function animate(now){
 }
 function updateOverlay(){
  if(!engine)return;
- // Read layout once, BEFORE writing projected marker coordinates.
- const box=section!=='home'&&app.classList.contains('panel-visible')&&!mobile()?panel.getBoundingClientRect():null;
- const offset=mobile()?[-22,-22]:[-12,-23];
- for(const {el,point} of hotspotNodes){
-  const p=engine.project(point);
-  el.style.transform=`translate3d(${p.x+offset[0]}px,${p.y+offset[1]}px,0)`;
-  el.style.visibility=p.depth<.1||p.x<15||p.x>innerWidth-18||p.y<90||p.y>innerHeight-95?'hidden':'visible';
+ const isMobile=mobile(),showPanel=section!=='home'&&app.classList.contains('panel-visible');
+ // Hidden markers need neither projection nor DOM writes while the camera travels.
+ // Read the panel's untransformed destination once per mount/resize, not per frame.
+ if(showPanel&&!isMobile&&!panelAnchor)panelAnchor={x:panel.offsetLeft,y:panel.offsetTop+25};
+ if(!transition){
+  const offset=isMobile?[-22,-22]:[-12,-23];
+  for(const {el,point} of hotspotNodes){
+   if(section!=='home'&&(isMobile||el.dataset.section!==section))continue;
+   const p=engine.project(point);
+   const transform=`translate3d(${p.x+offset[0]}px,${p.y+offset[1]}px,0)`;
+   const visibility=p.depth<.1||p.x<15||p.x>innerWidth-18||p.y<90||p.y>innerHeight-95?'hidden':'visible';
+   if(el.style.transform!==transform)el.style.transform=transform;
+   if(el.style.visibility!==visibility)el.style.visibility=visibility;
+  }
  }
- if(box){const p=engine.project(surface(sections[section])),endX=box.left,endY=box.top+25;
-  $('#connector path').setAttribute('d',`M ${p.x} ${p.y} L ${p.x+35} ${p.y} L ${endX-25} ${endY} L ${endX} ${endY}`);
+ if(showPanel&&!isMobile&&panelAnchor){
+  const p=engine.project(surface(sections[section])),{x:endX,y:endY}=panelAnchor;
+  const path=`M ${p.x} ${p.y} L ${p.x+35} ${p.y} L ${endX-25} ${endY} L ${endX} ${endY}`;
+  if(connectorPath.getAttribute('d')!==path)connectorPath.setAttribute('d',path);
  }
 }
 function draw(){if(engine&&cam){engine.render(cam,sections[section]);updateOverlay()}}
 function changeStep(d){const index=order.indexOf(section);navigate(order[Math.max(0,Math.min(order.length-1,index+d))])}
-function updateAccent(){const purple=accent==='purple',hex=purple?'#a877ec':'#ef3349',rgb=purple?'168,119,236':'239,51,73';document.documentElement.style.setProperty('--accent',hex);document.documentElement.style.setProperty('--accent-rgb',rgb);$$('[data-color]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.color===accent)));engine?.setAccent(purple?[.659,.467,.925]:[.937,.20,.286]);draw()}
-function updateMotion(){document.body.classList.toggle('reduce-motion',reduceMotion);$('.motion-btn').setAttribute('aria-pressed',String(reduceMotion));$('.motion-btn').setAttribute('aria-label',reduceMotion?'Enable camera motion':'Use reduced motion');$('.motion-label').textContent=reduceMotion?'MOTION OFF':'MOTION ON';if(reduceMotion&&transition){cam=motion.reset(pose(section));transition=null;cancelAnimationFrame(raf);raf=0;lastFrame=null;draw();finish()}}
+function updateMotion(){
+ document.body.classList.toggle('reduce-motion',reduceMotion);
+ if(reduceMotion&&transition){cam=motion.reset(pose(section));transition=null;cancelAnimationFrame(raf);raf=0;lastFrame=null;draw();finish()}
+}
 document.addEventListener('click',event=>{
  const target=event.target.closest('[data-section]');if(target){event.preventDefault();navigate(target.dataset.section);return}
- const color=event.target.closest('[data-color]');if(color){accent=color.dataset.color;store.set('noir-accent',accent);updateAccent();return}
  const art=event.target.closest('[data-art]');if(art){artOrigin=art;$('#dialog-title').textContent=art.dataset.title+' / SLEEVE STUDY';$('.dialog-art').src=study(art.dataset.art);$('.dialog-art').alt=art.dataset.title.toLowerCase()+' blackwork concept artwork';$('#art-dialog').showModal()}
 });
 $('.menu-toggle').addEventListener('click',()=>{const open=!app.classList.contains('menu-open');app.classList.toggle('menu-open',open);$('.menu-toggle').setAttribute('aria-expanded',String(open));$('.menu-toggle').setAttribute('aria-label',open?'Close navigation':'Open navigation')});
-$('.motion-btn').addEventListener('click',()=>{reduceMotion=!reduceMotion;store.set('noir-reduced-motion',String(reduceMotion));updateMotion()});
 $('#prev').addEventListener('click',()=>changeStep(-1));$('#next').addEventListener('click',()=>changeStep(1));
 $('#close-dialog').addEventListener('click',()=>$('#art-dialog').close());$('#art-dialog').addEventListener('close',()=>artOrigin?.focus());
 $('#art-dialog').addEventListener('click',e=>{if(e.target===$('#art-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});
@@ -134,7 +141,7 @@ let resizeFrame=0;
 addEventListener('resize',()=>{
  if(resizeFrame)return;
  resizeFrame=requestAnimationFrame(()=>{
-  resizeFrame=0;if(!motion)return;
+  resizeFrame=0;panelAnchor=null;if(!motion)return;
   if(engine)engine.resize();
   const target=pose(section);
   if(reduceMotion||!engine){cam=motion.reset(target);transition=null;cancelAnimationFrame(raf);raf=0;lastFrame=null;draw();finish();return}
@@ -151,16 +158,16 @@ addEventListener('resize',()=>{
 document.addEventListener('visibilitychange',()=>{
  lastFrame=null;
  if(document.hidden){if(raf)cancelAnimationFrame(raf);raf=0}
- else if(transition)requestFrame();
+ else if(transition)requestFrame();else draw();
 });
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();$('#error-banner').textContent='The 3D context was interrupted. Navigation and section content are still available. Reload to restore the arm.';$('#error-banner').hidden=false;app.classList.add('no-webgl');transition=null;cancelAnimationFrame(raf);raf=0;engine=null;finish()});
-matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',e=>{if(e.matches){reduceMotion=true;updateMotion()}});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',e=>{reduceMotion=e.matches;updateMotion()});
 // Read-only diagnostics used by the included browser regression tests.
-Object.defineProperty(window,'__NOIR_TEST__',{get:()=>({section,transitioning:!!transition,camera:{...cam},motion:motion?.snapshot(),panelSection,assetsWarmed,frames:engine?.frames||0,webgl:!!engine,accent,reduceMotion,panelVisible:app.classList.contains('panel-visible'),vertices:window.NOIR_MESH.vertexCount,triangles:window.NOIR_MESH.triangleCount})});
+Object.defineProperty(window,'__NOIR_TEST__',{get:()=>({section,transitioning:!!transition,camera:{...cam},motion:motion?.snapshot(),panelSection,assetsWarmed,frames:engine?.frames||0,webgl:!!engine,accent,reduceMotion,panelVisible:app.classList.contains('panel-visible'),vertices:window.NOIR_MESH.vertexCount,triangles:window.NOIR_MESH.triangleCount,renderInfo:engine?.diagnostics})});
 window.__NOIR_PROJECT_POINT__=p=>engine?.project(p);
 async function start(){
  cam=pose('home');motion=new NoirMotion.Controller(cam);cam=motion.pose;
- try{const texture=NoirArt.makeTexture(mobile());engine=NoirEngine.create(canvas,texture);updateAccent();draw()}
+ try{const texture=NoirArt.makeTexture(mobile());engine=NoirEngine.create(canvas,texture);draw()}
  catch(error){console.error('NOIR 3D setup:',error);app.classList.add('no-webgl');$('#error-banner').textContent='3D is unavailable in this browser. All sections remain accessible from the menu.';$('#error-banner').hidden=false}
  for(const kind of ['rose','moth','skull','dagger']){
   const image=new Image();image.src=study(kind);

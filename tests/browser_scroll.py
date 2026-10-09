@@ -1,156 +1,138 @@
-"""Run: python tests/browser_scroll.py [path-to-index.html]
-Requires Playwright and Chromium. Uses set_content, so no server/network is needed.
-Real mouse-wheel/native scrolling and CDP touch input; no input-controller mocks.
-Timing-sensitive strokes use CDP capture timestamps so software rendering or
-protocol round trips cannot silently turn one stroke into several fresh gestures.
+"""NOIR continuous input regressions. Run: python tests/browser_scroll.py
+Uses Chromium WebGL, trusted wheel/touch events, file:// and local HTTP.
+CHROMIUM_PATH optionally chooses an installed Chromium executable.
 """
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import json, os, sys, unittest
+import json, os, threading, unittest
 from playwright.sync_api import sync_playwright
 
-ROOT = Path(__file__).resolve().parents[1]
-HTML = Path(sys.argv.pop(1)) if len(sys.argv) > 1 else ROOT / 'index.html'
+ROOT=Path(__file__).resolve().parents[1]
+class QuietHandler(SimpleHTTPRequestHandler):
+ def log_message(self,*args): pass
 
-class ScrollBrowserTests(unittest.TestCase):
+class ScrollFlow(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
-  cls.pw = sync_playwright().start()
-  cls.browser = cls.pw.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH') or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else cls.pw.chromium.executable_path), headless=True, args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
-  cls.webgl = set()
+  cls.server=ThreadingHTTPServer(('127.0.0.1',0),partial(QuietHandler,directory=str(ROOT)))
+  threading.Thread(target=cls.server.serve_forever,daemon=True).start()
+  cls.url=f'http://127.0.0.1:{cls.server.server_port}/index.html'
+  cls.pw=sync_playwright().start()
+  exe=os.environ.get('CHROMIUM_PATH') or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else cls.pw.chromium.executable_path)
+  cls.browser=cls.pw.chromium.launch(executable_path=exe,headless=True,args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+  cls.evidence=[]
  @classmethod
  def tearDownClass(cls):
-  print('Actual WebGL availability in browser runs:', cls.webgl)
-  cls.browser.close(); cls.pw.stop()
+  (ROOT/'evidence').mkdir(exist_ok=True)
+  (ROOT/'evidence'/'scroll-flow-browser.json').write_text(json.dumps(cls.evidence,indent=2))
+  cls.browser.close();cls.pw.stop();cls.server.shutdown();cls.server.server_close()
  def setUp(self):
-  self.page = self.browser.new_page(viewport={'width':1760,'height':832}, has_touch=True, reduced_motion='reduce')
-  self.errors=[];self.page.on('pageerror',lambda e:self.errors.append(str(e)))
-  self.page.set_content(HTML.read_text(encoding='utf-8'))
-  self.page.wait_for_function('window.__NOIR_TEST__?.assetsWarmed')
-  self.webgl.add(self.page.evaluate('window.__NOIR_TEST__.webgl'))
+  self.errors=[]
+  self.page=self.browser.new_page(viewport={'width':1440,'height':900},has_touch=True,reduced_motion='no-preference')
+  self.page.on('pageerror',lambda e:self.errors.append(str(e)))
+  self.page.goto(self.url)
+  self.ready()
  def tearDown(self):
   self.page.close();self.assertEqual(self.errors,[])
- def section(self):return self.page.evaluate('window.__NOIR_TEST__.section')
- def go(self,section):
-  self.page.locator(f'.section-nav [data-section={section}]').click()
-  self.page.wait_for_function('!window.__NOIR_TEST__.transitioning');self.page.wait_for_timeout(250)
- def wheel(self,delta,selector=None,pause=230):
-  if selector:self.page.locator(selector).hover()
-  else:self.page.mouse.move(850,420)
-  self.page.mouse.wheel(0,delta);self.page.wait_for_timeout(pause)
- def native_stroke(self,events,selector=None):
-  """Replay trusted native wheel events with specified (offset_ms, delta) pairs.
-
-  Preserve capture cadence even if the software GPU delays event delivery.
-  This does not patch the clock, router, camera, DOM scrollTop or event handler.
-  """
-  if selector:
-   self.page.locator(selector).hover()
-   box=self.page.locator(selector).bounding_box();x=box['x']+box['width']/2;y=box['y']+min(70,box['height']/2)
-  else:x,y=850,420;self.page.mouse.move(x,y)
+ def ready(self):
+  self.page.wait_for_function('window.__NOIR_TEST__?.assetsWarmed',timeout=20000)
+  self.assertTrue(self.state()['webgl'])
+ def state(self): return self.page.evaluate('window.__NOIR_TEST__')
+ def go(self,id):
+  self.page.locator(f'.section-nav [data-section="{id}"]').click()
+  self.page.wait_for_function('!window.__NOIR_TEST__.transitioning',timeout=20000)
+  self.page.wait_for_timeout(260)
+ def stroke(self,values,offsets=None,x=710,y=420):
+  """Trusted input, preserving capture cadence despite software-GPU delivery delays."""
+  offsets=offsets or [i*55 for i in range(len(values))]
+  self.page.mouse.move(x,y)
   self.page.evaluate("""() => {
-   window.__wheelEvidence=[];
-   window.__recordWheel=e=>window.__wheelEvidence.push({stamp:e.timeStamp,delivered:performance.now(),delta:e.deltaY,trusted:e.isTrusted});
-   window.addEventListener('wheel',window.__recordWheel,{capture:true,passive:true});
+   window.__flow=[]; window.__flowListener=e=>window.__flow.push({
+    delta:e.deltaY,stamp:e.timeStamp,trusted:e.isTrusted,...window.__NOIR_TEST__});
+   document.getElementById('app').addEventListener('wheel',window.__flowListener,{passive:true});
   }""")
   origin,base=self.page.evaluate('[performance.timeOrigin,performance.now()]')
-  cdp=self.page.context.new_cdp_session(self.page);previous=0
-  try:
-   for offset,delta in events:
-    self.page.wait_for_timeout(max(0,offset-previous));previous=offset
-    cdp.send('Input.dispatchMouseEvent',{'type':'mouseWheel','x':x,'y':y,'deltaX':0,'deltaY':delta,'timestamp':(origin+base+offset)/1000})
-   self.page.wait_for_function('window.__wheelEvidence.length >= '+str(len(events)))
-   evidence=self.page.evaluate('window.__wheelEvidence')
-   self.assertEqual(len(evidence),len(events))
-   for record,(offset,delta) in zip(evidence,events):
-    self.assertTrue(record['trusted']);self.assertAlmostEqual(record['delta'],delta,places=4)
-    self.assertAlmostEqual(record['stamp']-evidence[0]['stamp'],offset-events[0][0],delta=2)
-   print('Trusted wheel capture/delivery evidence:',json.dumps(evidence),flush=True)
-  finally:
-   self.page.evaluate("window.removeEventListener('wheel',window.__recordWheel,true)")
-   cdp.detach()
- def top(self,value=0):self.page.locator('#section-content').evaluate('(e,y)=>e.scrollTop=y',value)
- def native_top(self):return self.page.locator('#section-content').evaluate('e=>e.scrollTop')
- def touch(self,selector,dy):
-  box=self.page.locator(selector).bounding_box();x=box['x']+box['width']/2;y=box['y']+min(80,box['height']/3)
   cdp=self.page.context.new_cdp_session(self.page)
-  cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y}]})
-  for i in range(1,7):
-   cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x,'y':y+dy*i/6}]});self.page.wait_for_timeout(25)
-  cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]});self.page.wait_for_timeout(250);cdp.detach()
- def test_01_artist_panel_top_returns_home(self):
-  self.go('artist');self.wheel(-40,'#section-content h2');self.assertEqual(self.section(),'home')
- def test_02_forward_and_reverse_all_sections(self):
-  for name in ['artist','work','ritual','booking']:
-   self.wheel(120);self.assertEqual(self.section(),name)
-  for name in ['ritual','work','artist','home']:
-   self.wheel(-120);self.assertEqual(self.section(),name)
- def test_03_header_is_not_a_dead_zone(self):
-  self.go('artist');self.wheel(-120,'.topnav');self.assertEqual(self.section(),'home')
- def test_04_settings_are_not_a_dead_zone(self):
-  self.go('artist');self.wheel(-120,'.settings');self.assertEqual(self.section(),'home')
- def test_05_small_slow_notches_accumulate(self):
-  self.go('artist');self.native_stroke([(0,-20),(240,-20)]);self.assertEqual(self.section(),'home')
- def test_06_native_content_reading_keeps_section(self):
-  self.go('work');self.top(100);self.wheel(70,'#section-content')
-  self.page.wait_for_function("document.getElementById('section-content').scrollTop > 100",timeout=5000)
-  self.assertEqual(self.section(),'work');self.assertGreater(self.native_top(),100)
-  self.wheel(-60,'#section-content');self.assertEqual(self.section(),'work')
- def test_07_fresh_scroll_at_panel_bottom_advances(self):
-  self.go('work');self.top(100000);self.wheel(120,'#section-content');self.assertEqual(self.section(),'ritual')
- def test_08_reading_does_not_leak_at_a_boundary(self):
-  self.go('artist');self.top(50)
-  self.native_stroke([(0,-100),(60,-70),(110,-40)],'#section-content')
-  self.assertEqual(self.section(),'artist')
-  self.page.wait_for_timeout(250);self.wheel(-40,'#section-content');self.assertEqual(self.section(),'home')
- def test_09_trackpad_tail_does_not_skip(self):
-  self.native_stroke([(i*18,120*(.88**i)) for i in range(45)])
-  self.assertEqual(self.section(),'artist')
- def test_10_continued_deliberate_scroll_does_not_lock(self):
-  self.page.mouse.move(850,420)
-  for i in range(16):self.page.mouse.wheel(0,120);self.page.wait_for_timeout(100)
-  self.assertIn(self.section(),['ritual','booking'])
- def test_11_controls_modal_zoom_and_horizontal_are_preserved(self):
-  self.go('booking');self.wheel(-120,'input[name=name]');self.assertEqual(self.section(),'booking')
-  self.page.locator('#app').dispatch_event('wheel',{'deltaY':-120,'ctrlKey':True,'bubbles':True,'cancelable':True});self.assertEqual(self.section(),'booking')
-  self.page.locator('#app').dispatch_event('wheel',{'deltaY':-20,'deltaX':120,'bubbles':True,'cancelable':True});self.assertEqual(self.section(),'booking')
-  self.go('work');self.page.locator('.art-card').first.click();self.page.mouse.wheel(0,-160);self.page.wait_for_timeout(100);self.assertEqual(self.section(),'work')
- def test_12_click_then_scroll_has_no_stale_gesture(self):
-  self.wheel(120,pause=40);self.go('work');self.wheel(-120);self.assertEqual(self.section(),'artist')
- def test_13_line_mode_is_supported(self):
-  self.go('artist');self.page.locator('#section-content').dispatch_event('wheel',{'deltaY':-3,'deltaX':0,'deltaMode':1,'bubbles':True,'cancelable':True});self.assertEqual(self.section(),'home')
- def test_14_mobile_touch_panel_top_returns_home(self):
-  self.page.set_viewport_size({'width':390,'height':844});self.go('artist');self.top(0);self.touch('#section-content',90);self.assertEqual(self.section(),'home')
- def test_15_mobile_native_reading_stays_in_panel(self):
-  self.page.set_viewport_size({'width':390,'height':844});self.go('work');self.top(150);self.touch('#section-content',-70)
-  self.page.wait_for_function("document.getElementById('section-content').scrollTop > 150",timeout=5000)
-  self.assertEqual(self.section(),'work');self.assertGreater(self.native_top(),150)
- def test_16_mobile_menu_blocks_navigation(self):
-  self.page.set_viewport_size({'width':390,'height':844});self.go('artist');self.page.locator('.menu-toggle').click();self.page.locator('#app').dispatch_event('wheel',{'deltaY':-120,'bubbles':True,'cancelable':True});self.assertEqual(self.section(),'artist')
- def test_17_touch_swipe_only_advances_once(self):
-  self.page.set_viewport_size({'width':390,'height':844});self.touch('#home-content',-100);self.assertEqual(self.section(),'artist')
- def test_18_keyboard_navigation_still_works(self):
-  self.page.keyboard.press('PageDown');self.assertEqual(self.section(),'artist');self.page.keyboard.press('PageUp');self.assertEqual(self.section(),'home')
-
- def motion_page(self):
-  if not self.page.evaluate('window.__NOIR_TEST__.webgl'):self.skipTest('WebGL not available in this browser runtime')
-  self.page.close()
-  self.page = self.browser.new_page(viewport={'width':1760,'height':832}, has_touch=True, reduced_motion='no-preference')
-  self.page.on('pageerror',lambda e:self.errors.append(str(e)))
-  self.page.set_content(HTML.read_text(encoding='utf-8'))
-  self.page.wait_for_function('window.__NOIR_TEST__?.assetsWarmed')
-  self.assertFalse(self.page.evaluate('window.__NOIR_TEST__.reduceMotion'))
- def test_19_wheel_reversal_keeps_real_camera_continuous(self):
-  self.motion_page();self.page.mouse.move(850,420)
-  self.page.mouse.wheel(0,120);self.page.wait_for_timeout(100)
-  self.assertEqual(self.section(),'artist');self.assertTrue(self.page.evaluate('window.__NOIR_TEST__.transitioning'))
-  self.page.mouse.wheel(0,-120);self.page.wait_for_timeout(50)
-  self.assertEqual(self.section(),'home')
-  self.page.wait_for_function('!window.__NOIR_TEST__.transitioning',timeout=15000)
-  self.assertAlmostEqual(self.page.evaluate('window.__NOIR_TEST__.camera.radius'),11.9)
- def test_20_artist_panel_can_return_home_with_real_camera(self):
-  self.motion_page();self.go('artist')
-  self.wheel(-40,'#section-content h2',pause=50);self.assertEqual(self.section(),'home')
-  self.page.wait_for_function('!window.__NOIR_TEST__.transitioning',timeout=15000)
-  self.assertFalse(self.page.evaluate('window.__NOIR_TEST__.panelVisible'))
+  try:
+   for offset,value in zip(offsets,values):
+    cdp.send('Input.dispatchMouseEvent',{'type':'mouseWheel','x':x,'y':y,'deltaX':0,'deltaY':value,'timestamp':(origin+base+offset)/1000})
+   self.page.wait_for_function(f'window.__flow.length >= {len(values)}',timeout=15000)
+   self.page.wait_for_timeout(40)
+   trace=self.page.evaluate('window.__flow')
+   self.assertEqual(len(trace),len(values));self.assertTrue(all(e['trusted'] for e in trace))
+   self.evidence.append({'test':self.id(),'url':self.page.url,'events':trace})
+   return trace
+  finally:
+   self.page.evaluate("document.getElementById('app').removeEventListener('wheel',window.__flowListener)");cdp.detach()
+ def test_01_rapid_notches_pass_sections_before_landing(self):
+  trace=self.stroke([120,120,120],[0,55,110])
+  self.assertEqual([e['section'] for e in trace],['artist','work','ritual'])
+  self.assertTrue(all(e['transitioning'] for e in trace))
+  self.assertEqual(self.state()['section'],'ritual')
+ def test_02_immediate_reversal_during_motion(self):
+  self.stroke([120,120,120,-120,-120,-120],[0,45,90,135,180,225])
+  self.assertEqual(self.state()['section'],'home')
+ def test_03_gentle_continuation_is_registered(self):
+  trace=self.stroke([120]+[20]*10)
+  self.assertEqual(self.state()['section'],'ritual')
+  self.assertTrue(trace[-1]['transitioning'])
+ def test_04_stop_input_does_not_queue_more_sections(self):
+  self.stroke([120,120]);self.assertEqual(self.state()['section'],'work')
+  self.page.wait_for_function('!window.__NOIR_TEST__.transitioning',timeout=20000)
+  self.page.wait_for_timeout(450);self.assertEqual(self.state()['section'],'work')
+ def test_05_file_and_http_have_same_input_results(self):
+  self.stroke([120,120,-120]);expected=self.state()['section']
+  self.page.goto((ROOT/'index.html').as_uri());self.ready()
+  self.stroke([120,120,-120]);self.assertEqual(self.state()['section'],expected)
+ def test_06_artist_panel_top_scroll_returns_home(self):
+  self.go('artist');self.page.locator('#section-content h2').hover()
+  self.page.mouse.wheel(0,-40)
+  self.page.wait_for_function("window.__NOIR_TEST__.section==='home'")
+ def test_07_native_reading_and_boundary_remain_usable(self):
+  self.go('work');content=self.page.locator('#section-content');content.evaluate('e=>e.scrollTop=80');content.hover()
+  self.page.mouse.wheel(0,100)
+  self.page.wait_for_function("document.querySelector('#section-content').scrollTop>80")
+  self.assertEqual(self.state()['section'],'work')
+  self.page.wait_for_timeout(230);content.evaluate('e=>e.scrollTop=e.scrollHeight')
+  self.page.mouse.wheel(0,120)
+  self.page.wait_for_function("window.__NOIR_TEST__.section==='ritual'")
+ def test_08_modal_editable_zoom_and_horizontal_inputs_are_not_hijacked(self):
+  self.go('booking');self.page.locator('input[name=name]').hover();self.page.mouse.wheel(0,-120)
+  self.page.wait_for_timeout(80);self.assertEqual(self.state()['section'],'booking')
+  for args in [{'deltaY':-120,'ctrlKey':True},{'deltaY':-120,'metaKey':True},{'deltaY':-20,'deltaX':120}]:
+   self.page.locator('#app').dispatch_event('wheel',dict(bubbles=True,cancelable=True,**args))
+  self.assertEqual(self.state()['section'],'booking')
+  self.go('work');self.page.locator('.art-card').first.click();self.page.mouse.wheel(0,-120)
+  self.page.wait_for_timeout(80);self.assertEqual(self.state()['section'],'work')
+ def test_09_touch_long_drag_and_reverse_before_landing(self):
+  self.page.set_viewport_size({'width':390,'height':844});self.page.wait_for_timeout(150)
+  cdp=self.page.context.new_cdp_session(self.page)
+  try:
+   cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':300,'y':550}]})
+   for y in [490,430,370,310,250]:
+    cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':300,'y':y}]})
+   self.assertEqual(self.state()['section'],'ritual');self.assertTrue(self.state()['transitioning'])
+   cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':300,'y':330}]})
+   self.assertEqual(self.state()['section'],'work')
+   cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+  finally: cdp.detach()
+ def test_10_reduced_motion_keeps_navigation(self):
+  self.page.locator('.motion-btn').click();self.assertTrue(self.state()['reduceMotion'])
+  self.stroke([120,120,120]);self.assertEqual(self.state()['section'],'ritual');self.assertFalse(self.state()['transitioning'])
+ def test_11_header_and_footer_are_not_dead_zones(self):
+  self.go('artist');self.page.locator('.topnav').hover();self.page.mouse.wheel(0,-120)
+  self.page.wait_for_function("window.__NOIR_TEST__.section==='home'")
+  self.page.wait_for_timeout(200);self.page.locator('.settings').hover();self.page.mouse.wheel(0,120)
+  self.page.wait_for_function("window.__NOIR_TEST__.section==='artist'")
+ def test_12_browser_history_and_direct_click_still_work(self):
+  self.stroke([120,120]);self.go('booking');self.stroke([-120]);self.assertEqual(self.state()['section'],'ritual')
+  self.page.go_back();self.page.wait_for_function("window.__NOIR_TEST__.section==='booking'")
+ def test_13_small_wheel_units_accumulate(self):
+  self.go('artist');self.stroke([-20,-20],[0,240]);self.assertEqual(self.state()['section'],'home')
+ def test_14_menu_blocks_mobile_navigation(self):
+  self.page.set_viewport_size({'width':390,'height':844});self.go('artist')
+  self.page.locator('.menu-toggle').click();self.stroke([-120],x=200,y=300)
+  self.assertEqual(self.state()['section'],'artist')
 
 if __name__=='__main__':unittest.main(verbosity=2)

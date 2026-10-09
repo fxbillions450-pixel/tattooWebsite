@@ -1,0 +1,15 @@
+{
+  "baseline_commit": "13842dc976ccba0d25136bb783f0e697634d5938",
+  "verified_build_commit": "6449d2a7e64d8519081ac33be6d753c7c4d483b6",
+  "ci_run": "https://github.com/fxbillions450-pixel/tattooWebsite/actions/runs/37864512563",
+  "html_sha256": "312c252514fde6c1c2fa933453fd41974d0527e9b302ac3f441dd0eca95cf14c",
+  "html_bytes": 892571,
+  "root_and_public_html_identical": true,
+  "tests": {"scroll_unit": 26, "motion_regressions": 51, "chromium_browser": 14},
+  "browser_webgl_required": true,
+  "browser_transports": ["local HTTP", "file URI"],
+  "physical_phone_tested": false,
+  "public_live_wheel_tested": false,
+  "unchanged_sources": ["src/app.js", "src/styles.css", "src/artwork.js", "src/engine.js", "src/mesh.js", "src/motion.js", "src/shell.html"],
+  "contract_change": "A sustained scene scroll may intentionally cross multiple destinations without waiting for camera landing. The old one-long-flick-one-section invariant was replaced, not retained."
+}

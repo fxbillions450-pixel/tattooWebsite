@@ -1,0 +1,90 @@
+name: Verify Wizards audit cleanup
+on:
+  push:
+    branches: [fix/wizards-audit-cleanup]
+permissions:
+  contents: read
+concurrency:
+  group: wizards-audit-cleanup
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Apply exact reviewed fixes and preserve baseline
+        run: |
+          python3 tools/build.py
+          cp index.html "$RUNNER_TEMP/wizards-baseline.html"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          specs = json.loads(Path('.audit-cleanup-patch.json').read_text())
+          assert set(specs) == {'src/styles.css','src/artwork.js','src/app.js'}
+          for name, spec in specs.items():
+              p = Path(name)
+              data = p.read_bytes()
+              assert hashlib.sha256(data).hexdigest() == spec['before'], name
+              text = data.decode('utf-8')
+              for before, after in spec['replacements']:
+                  assert text.count(before) == 1, (name, before)
+                  text = text.replace(before, after, 1)
+              data = text.encode('utf-8')
+              assert hashlib.sha256(data).hexdigest() == spec['after'], name
+              p.write_bytes(data)
+          PY
+          python3 tools/build.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          data=Path('index.html').read_bytes()
+          assert data == Path('public/index.html').read_bytes()
+          assert hashlib.sha256(data).hexdigest() == 'ab117b1265f262bce66e9d086c52054c67d4faba30334435f5271c2bc223f7fc'
+          PY
+          git diff --exit-code -- src/engine.js src/mesh.js src/motion.js src/scroll.js src/brand.css src/shell.html tools/build.py
+          node --check src/app.js
+          node --check src/artwork.js
+          node --test tests/scroll.test.cjs
+          node tools/test_motion.cjs
+      - name: Install pinned browser runtime
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Test landscape, gallery history, branding and meaningful form text
+        env:
+          WIZARDS_REQUIRE_WEBGL: '1'
+        run: WIZARDS_BASELINE_HTML="$RUNNER_TEMP/wizards-baseline.html" python3 tests/audit_cleanup.py
+      - name: Verify existing continuous scrolling and responsive branding
+        run: |
+          python3 tests/browser_scroll.py
+          python3 tests/branding.py
+      - name: Save reviewed HTML and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wizards-audit-cleanup-review
+          retention-days: 7
+          path: |
+            evidence/audit-cleanup/
+            index.html
+            build-manifest.json
+      - name: Commit verified source and builds to review branch only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          git config user.name 'fxbillions450-pixel'
+          git config user.email '289425272+fxbillions450-pixel@users.noreply.github.com'
+          git add -- src/app.js src/artwork.js src/styles.css index.html public/index.html build-manifest.json
+          git commit -m 'Build verified Wizards landscape, gallery, artwork branding and form fixes'
+          askpass="$RUNNER_TEMP/wizards-audit-askpass.sh"
+          printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$GH_TOKEN" ;; esac' > "$askpass"
+          chmod 700 "$askpass"
+          trap 'rm -f "$askpass"' EXIT
+          GIT_ASKPASS="$askpass" git push origin HEAD:fix/wizards-audit-cleanup

@@ -19,3 +19,36 @@ body.reduce-motion *,body.reduce-motion *:before,body.reduce-motion *:after{tran
 #panel{transition:opacity .22s ease,transform .22s ease,visibility 0s linear .22s;will-change:opacity,transform}
 .panel-visible #panel{transition:opacity .38s ease,transform .45s ease,visibility 0s;visibility:visible}
 .hotspot{will-change:transform,opacity}
+
+
+/* Short-window/landscape safety: leave portrait and normal desktop untouched.
+   Keep stable svh sizing; do not resize the renderer on keyboard/pinch events. */
+@media(max-height:480px){
+ #app{min-height:0}
+ .topbar{height:64px;gap:12px;padding-left:max(4.5%,env(safe-area-inset-left));padding-right:max(4.5%,env(safe-area-inset-right))}
+ .topnav{gap:18px}
+ .hero{top:74px;left:7%;width:43%}
+ .hero .eyebrow{font-size:7px;letter-spacing:1px}
+ .hero h1{font-size:clamp(32px,12svh,56px);margin:10px 0;line-height:.81}
+ .hero .intro{font-size:9px;line-height:1.4;margin-bottom:8px}
+ .hero .explore{font-size:8px;gap:10px;min-height:32px}
+ .circle-arrow{width:28px;height:28px;font-size:16px}
+ .model-meta,.location-caption,.scroll-cue{display:none}
+ .return-overview{top:66px;left:max(5%,env(safe-area-inset-left));min-height:36px}
+ #panel{top:80px;bottom:calc(64px + env(safe-area-inset-bottom));left:auto;right:max(5%,env(safe-area-inset-right));width:44%;max-height:none}
+ .panel-shell{height:100%;max-height:100%;min-height:0;display:flex;flex-direction:column}
+ .panel-top{flex:0 0 auto;padding:12px 16px}
+ .panel-scroll{flex:1;min-height:0;max-height:none;padding:16px}
+ .panel-scroll h2{font-size:27px;margin-bottom:14px}
+ .form-row{grid-template-columns:1fr}
+ .bottom-bar{left:max(4.5%,env(safe-area-inset-left));right:max(4.5%,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));height:44px;align-items:center}
+ .section-nav{bottom:0}
+ .section-nav button{height:44px;width:38px}
+ .arrows button{height:44px;width:36px}
+}
+@media(max-height:480px) and (max-width:760px){
+ .topnav{top:60px;max-height:calc(100svh - 124px - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain;gap:4px}
+}
+@media(max-height:340px){
+ .hero .intro{display:none}
+}

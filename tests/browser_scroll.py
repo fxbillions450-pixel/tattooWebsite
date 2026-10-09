@@ -118,7 +118,7 @@ class ScrollFlow(unittest.TestCase):
    cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
   finally: cdp.detach()
  def test_10_reduced_motion_keeps_navigation(self):
-  self.page.locator('.motion-btn').click();self.assertTrue(self.state()['reduceMotion'])
+  self.page.emulate_media(reduced_motion='reduce');self.page.wait_for_function('window.__NOIR_TEST__.reduceMotion');self.assertTrue(self.state()['reduceMotion'])
   self.stroke([120,120,120]);self.assertEqual(self.state()['section'],'ritual');self.assertFalse(self.state()['transitioning'])
  def test_11_header_and_footer_are_not_dead_zones(self):
   self.go('artist');self.page.locator('.topnav').hover();self.page.mouse.wheel(0,-120)

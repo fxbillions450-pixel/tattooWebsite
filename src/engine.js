@@ -9,7 +9,7 @@ window.NoirEngine = (()=>{
   const vertex=`precision highp float;
     attribute vec3 aPosition;attribute vec3 aNormal;uniform mat4 uModel,uView,uProjection;varying vec3 vNormal,vWorld,vLocal;
     void main(){vec4 w=uModel*vec4(aPosition,1.);vLocal=aPosition;vWorld=w.xyz;vNormal=mat3(uModel)*aNormal;gl_Position=uProjection*uView*w;}`;
-  const fragment=`precision highp float;
+  const originalFragment=`precision highp float;
     varying vec3 vNormal,vWorld,vLocal;uniform sampler2D uTattoo;uniform vec3 uEye,uAccent;uniform float uActiveY,uActive;
     float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
     void main(){
@@ -34,27 +34,73 @@ window.NoirEngine = (()=>{
       color=pow(max(color,vec3(0.)),vec3(.83));
       gl_FragColor=vec4(color,fade);
     }`;
+  // A compact, repeatable material tile: RG = subtle normal detail, B = tone.
+  // Generated once; mipmaps filter pores instead of per-fragment random shimmer.
+  function skinTile(gl){
+    const size=256,bytes=new Uint8Array(size*size*4);let seed=72831;
+    const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
+    for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+      const i=(y*size+x)*4,grain=rand();
+      bytes[i]=116+Math.floor(rand()*24);bytes[i+1]=116+Math.floor(rand()*24);
+      bytes[i+2]=Math.round(128+16*Math.sin(x*Math.PI/32)*Math.cos(y*Math.PI/64)+(grain-.5)*34);
+      bytes[i+3]=255;
+    }
+    const tex=gl.createTexture();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,size,size,0,gl.RGBA,gl.UNSIGNED_BYTE,bytes);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);gl.activeTexture(gl.TEXTURE0);return tex;
+  }
+  const skinFragment=`precision highp float;
+    varying vec3 vNormal,vWorld,vLocal;uniform sampler2D uTattoo,uSkin;
+    uniform vec3 uEye,uAccent;uniform float uActiveY,uActive;
+    void main(){
+      vec3 n=normalize(vNormal),v=normalize(uEye-vWorld);
+      float cx=mix(.09,-.07,smoothstep(-1.5,1.,vLocal.y));
+      float ang=atan(vLocal.x-cx,(vLocal.z+.005)*1.1);
+      vec2 uv=vec2(ang/6.2831853+.5,(3.65-vLocal.y)/7.85);
+      vec3 ink=texture2D(uTattoo,uv).rgb;
+      vec3 detail=texture2D(uSkin,uv*vec2(9.,18.)).rgb;
+      vec3 tangent=normalize(vec3(n.z,0.,-n.x)+vec3(.0001,0.,0.));
+      n=normalize(n+.14*(tangent*(detail.r-.5)+cross(n,tangent)*(detail.g-.5)));
+      // Original artwork remains intact; pigment modulates a warm skin base.
+      float pigment=pow(clamp((ink.r-.04)/.76,0.,1.),.82);
+      vec3 skin=mix(vec3(.026,.022,.022),vec3(.70,.49,.39),pigment);
+      skin*=.96+detail.b*.08;
+      vec3 l1=normalize(vec3(-3.8,5.,6.)-vWorld),l2=normalize(vec3(4.,0.,3.)-vWorld);
+      float light=.20+max(dot(n,l1),0.)*1.15+max(dot(n,l2),0.)*.20;
+      float spec=pow(max(dot(n,normalize(l1+v)),0.),32.)*.09;
+      float fres=pow(1.-max(dot(n,v),0.),3.5),rim=max(dot(n,normalize(vec3(4.,2.,-3.))),0.);
+      vec3 color=skin*light+vec3(.78,.70,.65)*spec;
+      color+=fres*(vec3(.11,.095,.085)+uAccent*rim*.30);
+      float dy=(vLocal.y-uActiveY)/.22;
+      color+=uAccent*exp(-dy*dy)*uActive*fres*.075;
+      gl_FragColor=vec4(pow(max(color,vec3(0.)),vec3(.83)),1.-smoothstep(2.99,3.57,vLocal.y));
+    }`;
   function create(canvas,texture){
-    const gl=canvas.getContext('webgl',{alpha:true,antialias:true,powerPreference:'high-performance',premultipliedAlpha:false,preserveDrawingBuffer:true});
+    const gl=canvas.getContext('webgl',{alpha:true,antialias:true,powerPreference:'high-performance',premultipliedAlpha:false,preserveDrawingBuffer:false});
     if(!gl)throw new Error('WebGL is not available');
     const data=window.NOIR_MESH;
+    const material=new URLSearchParams(location.search).get('arm')==='original'?'original':'skin';
     const raw=decode(data.positions,Int16Array),rn=decode(data.normals,Int16Array);
     const p=new Float32Array(raw.length),n=new Float32Array(rn.length);
     for(let i=0;i<raw.length;i++){p[i]=raw[i]/data.scale;n[i]=rn[i]/32767}
     const idx=decode(data.indices,data.indexBytes===2?Uint16Array:Uint32Array);
     if(data.indexBytes===4&&!gl.getExtension('OES_element_index_uint'))throw new Error('32-bit element arrays unavailable');
-    const program=gl.createProgram();gl.attachShader(program,shader(gl,gl.VERTEX_SHADER,vertex));gl.attachShader(program,shader(gl,gl.FRAGMENT_SHADER,fragment));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.useProgram(program);
+    const program=gl.createProgram();gl.attachShader(program,shader(gl,gl.VERTEX_SHADER,vertex));gl.attachShader(program,shader(gl,gl.FRAGMENT_SHADER,material==='original'?originalFragment:skinFragment));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.useProgram(program);
     for(const [name,arr]of [['aPosition',p],['aNormal',n]]){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,arr,gl.STATIC_DRAW);const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,3,gl.FLOAT,false,0,0)}
     const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx,gl.STATIC_DRAW);
     const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     const anis=gl.getExtension('EXT_texture_filter_anisotropic');if(anis)gl.texParameterf(gl.TEXTURE_2D,anis.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(4,gl.getParameter(anis.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
-    const u={};for(const name of ['uModel','uView','uProjection','uEye','uAccent','uTattoo','uActiveY','uActive'])u[name]=gl.getUniformLocation(program,name);
+    const u={};for(const name of ['uModel','uView','uProjection','uEye','uAccent','uTattoo','uSkin','uActiveY','uActive'])u[name]=gl.getUniformLocation(program,name);
     const model=new Float32Array([ct,st,0,0,-st,ct,0,0,0,0,1,0,0,0,0,1]);gl.uniformMatrix4fv(u.uModel,false,model);gl.uniform1i(u.uTattoo,0);
+    if(material==='skin'){skinTile(gl);gl.uniform1i(u.uSkin,1)}
     gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.disable(gl.CULL_FACE);
-    let width=1,height=1,eye=[0,0,12],right=[1,0,0],up=[0,1,0],forward=[0,0,-1],aspect=1,shiftX=0,shiftY=0,tan=Math.tan(43*Math.PI/360),frames=0,accent=[.94,.20,.29];
+    let width=1,height=1,eye=[0,0,12],right=[1,0,0],up=[0,1,0],forward=[0,0,-1],aspect=1,shiftX=0,shiftY=0,tan=Math.tan(43*Math.PI/360),frames=0,accent=[.937,.20,.286];
     function resize(){
       width=Math.max(1,canvas.clientWidth);height=Math.max(1,canvas.clientHeight);
-      const dpr=Math.min(devicePixelRatio||1,width<761?1.5:1.7);
+      // Fixed budget, never resized mid-flight. DOM text keeps native resolution.
+      const dpr=width<761?Math.min(devicePixelRatio||1,1.5):Math.min(devicePixelRatio||1,1.5,Math.sqrt(4500000/(width*height)));
       const w=Math.max(1,Math.round(width*dpr)),h=Math.max(1,Math.round(height*dpr));
       // Avoid reallocating the drawing buffer on unchanged resize notifications.
       if(canvas.width!==w)canvas.width=w;if(canvas.height!==h)canvas.height=h;
@@ -66,11 +112,18 @@ window.NoirEngine = (()=>{
     function render(cam,active){
       if(gl.isContextLost())return;
       gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-      const focus=world([0,cam.y,0]);
-      eye=V.add(focus,[Math.sin(cam.theta)*Math.cos(cam.phi)*cam.radius,Math.sin(cam.phi)*cam.radius,Math.cos(cam.theta)*Math.cos(cam.phi)*cam.radius]);
-      forward=V.norm(V.sub(focus,eye));right=V.norm(V.cross(forward,[0,1,0]));up=V.cross(right,forward);
-      const z=V.mul(forward,-1);const view=viewBuffer;view.set([right[0],up[0],z[0],0,right[1],up[1],z[1],0,right[2],up[2],z[2],0,-V.dot(right,eye),-V.dot(up,eye),-V.dot(z,eye),1]);
-      shiftX=cam.sx;shiftY=cam.sy;const f=1/tan,near=.1,far=80;const proj=projectionBuffer;proj.set([f/aspect,0,0,0,0,f,0,0,shiftX,shiftY,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0]);
+      const fx=-cam.y*st,fy=cam.y*ct,sinT=Math.sin(cam.theta),cosT=Math.cos(cam.theta),sinP=Math.sin(cam.phi),cosP=Math.cos(cam.phi);
+      eye[0]=fx+sinT*cosP*cam.radius;eye[1]=fy+sinP*cam.radius;eye[2]=cosT*cosP*cam.radius;
+      forward[0]=-sinT*cosP;forward[1]=-sinP;forward[2]=-cosT*cosP;
+      right[0]=cosT;right[1]=0;right[2]=-sinT;
+      up[0]=-sinT*sinP;up[1]=cosP;up[2]=-cosT*sinP;
+      const view=viewBuffer;
+      view[0]=right[0];view[1]=up[0];view[2]=-forward[0];view[3]=0;
+      view[4]=0;view[5]=up[1];view[6]=-forward[1];view[7]=0;
+      view[8]=right[2];view[9]=up[2];view[10]=-forward[2];view[11]=0;
+      view[12]=-V.dot(right,eye);view[13]=-V.dot(up,eye);view[14]=V.dot(forward,eye);view[15]=1;
+      shiftX=cam.sx;shiftY=cam.sy;const f=1/tan,near=.1,far=80,proj=projectionBuffer;
+      proj[0]=f/aspect;proj[5]=f;proj[8]=shiftX;proj[9]=shiftY;proj[10]=(far+near)/(near-far);proj[11]=-1;proj[14]=2*far*near/(near-far);
       gl.uniformMatrix4fv(u.uView,false,view);gl.uniformMatrix4fv(u.uProjection,false,proj);eyeBuffer.set(eye);accentBuffer.set(accent);gl.uniform3fv(u.uEye,eyeBuffer);gl.uniform3fv(u.uAccent,accentBuffer);gl.uniform1f(u.uActiveY,active?.y||0);gl.uniform1f(u.uActive,active?1:0);gl.drawElements(gl.TRIANGLES,idx.length,data.indexBytes===2?gl.UNSIGNED_SHORT:gl.UNSIGNED_INT,0);frames++;
     }
     function project(pt){const q=V.sub(world(pt),eye),depth=V.dot(q,forward);return{x:((V.dot(q,right)/(depth*tan*aspect)-shiftX)*.5+.5)*width,y:(.5-(V.dot(q,up)/(depth*tan)-shiftY)*.5)*height,depth}}
@@ -86,7 +139,7 @@ window.NoirEngine = (()=>{
         const t=(e2x*qx+e2y*qy+e2z*qz)*inv;if(t>.01&&t<nearest){nearest=t;point=V.add(ro,V.mul(rd,t))}
       }return point;
     }
-    resize();return{render,resize,project,pick,setAccent:c=>{accent=c},get frames(){return frames},get size(){return{width,height}},world,get gl(){return gl}};
+    resize();return{render,resize,project,pick,setAccent:c=>{accent=c},get frames(){return frames},get size(){return{width,height}},world,get diagnostics(){return{material,bufferWidth:canvas.width,bufferHeight:canvas.height,pixelRatio:canvas.width/width,preserved:false,drawCallsPerFrame:1,skinTextureSize:material==='skin'?256:0}},get gl(){return gl}};
   }
   return{create,world};
 })();

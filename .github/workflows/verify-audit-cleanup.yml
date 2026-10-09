@@ -53,7 +53,7 @@ jobs:
           node tools/test_motion.cjs
       - name: Install pinned browser runtime
         run: |
-          python3 -m pip install playwright==1.57.0
+          python3 -m pip install playwright==1.57.0 Pillow==11.3.0
           python3 -m playwright install --with-deps chromium
       - name: Test landscape, gallery history, branding and meaningful form text
         env:

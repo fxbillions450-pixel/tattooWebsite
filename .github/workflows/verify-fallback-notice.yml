@@ -18,6 +18,7 @@ jobs:
           cp index.html "$RUNNER_TEMP/wizards-qa01-baseline.html"
           python3 -c "import hashlib; assert hashlib.sha256(open('index.html','rb').read()).hexdigest() == 'ab117b1265f262bce66e9d086c52054c67d4faba30334435f5271c2bc223f7fc'"
           python3 .qa01-patch.py
+          python3 .qa01-test-ready.py
           python3 tools/build.py
           python3 -c "import hashlib; from pathlib import Path; data=Path('index.html').read_bytes(); assert data == Path('public/index.html').read_bytes(); assert hashlib.sha256(data).hexdigest() == '4d10c187d051b8c6cc9392c132861e7ecabee17871ee0033e0392b8d5085d587'"
           git diff --exit-code -- src/engine.js src/mesh.js src/motion.js src/scroll.js src/artwork.js src/brand.css tools/build.py
@@ -55,7 +56,7 @@ jobs:
           set -euo pipefail
           git config user.name 'fxbillions450-pixel'
           git config user.email '289425272+fxbillions450-pixel@users.noreply.github.com'
-          git add -- src/app.js src/styles.css src/shell.html index.html public/index.html build-manifest.json
+          git add -- src/app.js src/styles.css src/shell.html index.html public/index.html build-manifest.json tests/fallback_notice.py
           git commit -m 'Build verified non-overlapping and dismissible 3D fallback notice'
           askpass="$RUNNER_TEMP/wizards-qa01-askpass.sh"
           printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$GH_TOKEN" ;; esac' > "$askpass"

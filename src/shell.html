@@ -13,6 +13,7 @@
 <a class="book-nav" href="#booking" data-section="booking">START A PIECE <span aria-hidden="true">↗</span></a>
 <button class="menu-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="main-nav"><i></i><i></i></button>
 </header>
+<div class="error-banner" id="error-banner" role="region" aria-label="3D availability notice" hidden><p id="error-message" role="status"></p><button id="dismiss-error" type="button" aria-label="Dismiss 3D notice"><span aria-hidden="true">×</span></button></div>
 <main id="main-content">
 <div class="hero" id="home-content"><div class="eyebrow"><span class="tiny-square"></span>THE BODY IS THE CANVAS.</div><h1><span>INK.</span><span>BEYOND</span><span class="outline">SKIN.</span></h1><p class="intro">Some stories aren't told.<br>They're worn. Explore a different<br>kind of tattoo experience.</p><button class="explore" data-section="artist"><span class="circle-arrow" aria-hidden="true">↘</span>EXPLORE THE SLEEVE</button></div>
 <div class="model-meta" aria-hidden="true"><b>FIG. 001</b> / THE SLEEVE<br>BLACKWORK · IN THREE DIMENSIONS</div>
@@ -24,7 +25,7 @@
 <div class="scroll-cue"><svg viewBox="0 0 13 20" aria-hidden="true"><rect x="2" y="1" width="9" height="17" rx="4.5"/><path d="M6.5 4v4"/></svg>SCROLL TO DISCOVER · CLICK A TATTOO TO ENTER</div>
 </main>
 <footer class="bottom-bar"><div class="prototype-mark"><strong>WIZARDS TATTOOS.</strong>DESIGN PROTOTYPE / NOT A LIVE STUDIO</div><nav class="section-nav" aria-label="Section navigation"><button data-section="home" aria-label="Overview" aria-current="page">00</button><span class="step-line"></span><button data-section="artist" aria-label="The artist">01</button><button data-section="work" aria-label="Selected work">02</button><button data-section="ritual" aria-label="The ritual">03</button><button data-section="booking" aria-label="Start a piece">04</button></nav><div class="settings"><div class="arrows"><button id="prev" aria-label="Previous section" disabled>←</button><button id="next" aria-label="Next section">→</button></div></div></footer>
-<div id="status" class="sr-only" role="status" aria-live="polite"></div><div class="error-banner" id="error-banner" hidden></div>
+<div id="status" class="sr-only" role="status" aria-live="polite"></div>
 <div class="loading" aria-live="polite"><div class="loading-brand" aria-label="Wizards Tattoos"><img class="brand-logo" src="__WIZARDS_LOGO_URI__" alt="" width="150" height="150" decoding="async"><span class="wordmark brand-name"><span>WIZARDS<span class="slash" aria-hidden="true">/</span></span><span class="brand-subtitle">TATTOOS</span></span></div><span>FORMING THE EXPERIENCE</span><div class="loading-line"><i></i></div></div>
 </div>
 <dialog id="art-dialog" aria-labelledby="dialog-title"><div class="dialog-bar"><span id="dialog-title">SLEEVE STUDY</span><button id="close-dialog" aria-label="Close artwork">×</button></div><img class="dialog-art" alt="Original ornamental tattoo concept artwork"><p class="dialog-caption">Original procedural artwork. A visual study, not a photograph of a completed tattoo.</p></dialog>

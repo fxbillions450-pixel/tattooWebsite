@@ -1,0 +1,11 @@
+# QA-01: unobscured no-WebGL notice
+
+Report: Wizards Tattoos live browser QA dated 9 October 2026. The observed issue was the fixed 3D-unavailable banner overlapping Back to the sleeve at 500x757 and panel content at 844x390. Baseline: 8b7058b6bb3c63638fae9b13e304641a33558c51.
+
+The fallback application now reserves intrinsic-height grid rows for the header, notice, content and footer. Only the content panel scrolls. The notice wraps without covering controls, including the longer interrupted-context message. A labelled 44px dismiss button reclaims its row without deleting the form or changing route. Keyboard dismissal restores focus to the current section control without moving the document. Dismissal is per page, not a stored suppression of future faults.
+
+The same notice path handles initial setup failure and later context loss. All layout overrides require `.no-webgl`: the healthy 3D composition, arm/material, motion solver, wheel/touch router, branding and demo submission behavior are unchanged. This patch does not try to enable WebGL in restricted browsers, change GPU policy, or add unsupported hardware guarantees. The report's optional form-result focus suggestion and unverified touch/hotspot concerns are not silently treated as reproduced bugs.
+
+Run `python3 tools/build.py` then `python3 tests/fallback_notice.py` (Playwright 1.57.0, Pillow 11.3.0). `WIZARDS_BASELINE_HTML` enables before/after checks. `WIZARDS_REQUIRE_WEBGL=1` requires genuine WebGL for healthy-view parity and real context loss. `WIZARDS_AUDIT_URL` runs behavior against the live site. Fallback failure injection returns null only for WebGL contexts; canvas artwork remains real. The restricted local set_content mode tests fallback UI only and must not be called a 3D pass.
+
+Coverage: original overlap reproduced at both reported sizes; all five sections at eight viewports (320x568 through 1760x832, including 568x320 landscape); notice dismissal and focus; navigation, menu and panel wheel routing; four galleries; fictional demo preview/Edit; long context-loss notice; healthy 3D layout/pixel parity; real WEBGL_lose_context fallback. Actual device FPS, Safari/iOS and physical touch remain outside this patch's verification.

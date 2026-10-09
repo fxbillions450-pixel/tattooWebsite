@@ -184,7 +184,19 @@ document.addEventListener('visibilitychange',()=>{
  if(document.hidden){if(raf)cancelAnimationFrame(raf);raf=0}
  else if(transition)requestFrame();else draw();
 });
-canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();$('#error-banner').textContent='The 3D context was interrupted. Navigation and section content are still available. Reload to restore the arm.';$('#error-banner').hidden=false;app.classList.add('no-webgl');transition=null;cancelAnimationFrame(raf);raf=0;engine=null;finish()});
+// Fallback notices occupy a layout row, never an overlay. Dismissal is local
+// to this page; it does not hide future context-loss messages or change motion.
+function showFallbackNotice(message){
+ app.classList.add('no-webgl');
+ $('#error-message').textContent=message;
+ $('#error-banner').hidden=false;
+}
+$('#dismiss-error').addEventListener('click',()=>{
+ const notice=$('#error-banner'),hadFocus=notice.contains(document.activeElement);
+ notice.hidden=true;
+ if(hadFocus)document.querySelector('.section-nav [data-section="'+section+'"]')?.focus({preventScroll:true});
+});
+canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();showFallbackNotice('The 3D context was interrupted. Navigation and section content are still available. Reload to restore the arm.');transition=null;cancelAnimationFrame(raf);raf=0;engine=null;finish()});
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',e=>{reduceMotion=e.matches;updateMotion()});
 // Read-only diagnostics used by the included browser regression tests.
 Object.defineProperty(window,'__NOIR_TEST__',{get:()=>({section,transitioning:!!transition,camera:{...cam},motion:motion?.snapshot(),panelSection,assetsWarmed,frames:engine?.frames||0,webgl:!!engine,accent,reduceMotion,panelVisible:app.classList.contains('panel-visible'),vertices:window.NOIR_MESH.vertexCount,triangles:window.NOIR_MESH.triangleCount,renderInfo:engine?.diagnostics})});
@@ -192,7 +204,7 @@ window.__NOIR_PROJECT_POINT__=p=>engine?.project(p);
 async function start(){
  cam=pose('home');motion=new NoirMotion.Controller(cam);cam=motion.pose;
  try{const texture=NoirArt.makeTexture(mobile());engine=NoirEngine.create(canvas,texture);draw()}
- catch(error){console.error('NOIR 3D setup:',error);app.classList.add('no-webgl');$('#error-banner').textContent='3D is unavailable in this browser. All sections remain accessible from the menu.';$('#error-banner').hidden=false}
+ catch(error){console.error('NOIR 3D setup:',error);showFallbackNotice('3D is unavailable in this browser. All sections remain accessible from the menu.')}
  for(const kind of ['rose','moth','skull','dagger']){
   const image=new Image();image.src=study(kind);
   try{await image.decode()}catch{/* The cached data URL remains usable as a fallback. */}

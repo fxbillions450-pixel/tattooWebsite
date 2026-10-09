@@ -1,0 +1,30 @@
+name: Retrieve public Wizards Tattoos logo for review
+on:
+  push:
+    branches: [branding/wizards-tattoos]
+    paths: ['.github/workflows/review-wizards-logo.yml']
+permissions:
+  contents: read
+jobs:
+  review_logo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Download only the public profile picture
+        run: |
+          python3 - <<'PY'
+          import pathlib, urllib.request, hashlib
+          url = 'https://scontent-den2-1.cdninstagram.com/v/t51.2885-19/412470774_1029118161531919_5031152729443040431_n.jpg?stp=dst-jpg_s150x150_tt6&_nc_cat=101&ccb=7-5&_nc_sid=f7ccc5&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy4xMDgwLkMzIn0%3D&_nc_ohc=HYUbS54xWq8Q7kNvwEhWEuE&_nc_oc=AdrQqn74KoERrq7PDTclArRMdfyKdu3TGtRIs1-DwGmicvl_K13oPnosqyIaNqCd3Sw&_nc_zt=24&_nc_ht=scontent-den2-1.cdninstagram.com&_nc_ss=7ba8c&oh=00_AQNtk-b22bD2vIEJE8sHtcMGZOvGNL187zbyNjZcadg0bw&oe=6ACE0282'
+          request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'image/jpeg'})
+          with urllib.request.urlopen(request, timeout=25) as response:
+              data = response.read(1000001)
+          assert 1000 < len(data) < 1000000 and data.startswith(b'\xff\xd8\xff'), 'No usable JPEG returned'
+          pathlib.Path('wizards-instagram-logo.jpg').write_bytes(data)
+          print('Logo bytes:', len(data), 'SHA256:', hashlib.sha256(data).hexdigest())
+          PY
+      - name: Save original logo for visual review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wizards-logo-original
+          path: wizards-instagram-logo.jpg
+          retention-days: 3
